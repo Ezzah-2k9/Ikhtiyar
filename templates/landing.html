@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#102522">
+    <title>Ikhtiyar — Thoughtful journeys, smarter choices</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="landing-page">
+    <nav class="navbar landing-nav"><div class="container">
+        <a href="/" class="logo" aria-label="Ikhtiyar home"><picture class="brand-picture"><source media="(max-width: 650px)" srcset="{{ url_for('static', filename='images/ikhtiyar-black.png') }}"><img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')"></picture></a>
+        <div class="nav-links"><a href="#how-it-works">How it works</a><a href="{{ url_for('login') }}" class="btn btn-outline">Sign in</a><a href="{{ url_for('register') }}" class="btn btn-primary">Get started <span aria-hidden="true">↗</span></a></div>
+    </div></nav>
+    <main>
+        <header class="editorial-hero">
+            <div class="hero-orbit hero-orbit-one"></div><div class="hero-orbit hero-orbit-two"></div>
+            <div class="container editorial-hero-grid">
+                <div class="hero-copy">
+                    <span class="eyebrow"><span class="live-dot"></span> INTENTIONAL MOBILITY · UAE</span>
+                    <h1>Move with<br><span>more meaning.</span></h1>
+                    <p>Every route is a choice. Make yours with a clearer view of the time, cost and impact behind every journey.</p>
+                    <div class="hero-actions"><a href="{{ url_for('register') }}" class="btn btn-primary">Find your way <span class="arrow-nudge" aria-hidden="true">↗</span></a><a href="#how-it-works" class="text-link">Explore Ikhtiyar <span aria-hidden="true">↓</span></a></div>
+                    <div class="world-clocks" aria-label="World clocks">
+                        <div><span>GULF STANDARD TIME</span><strong data-clock="Asia/Dubai">--:--:--</strong><small>GST · UAE</small></div>
+                        <div><span>CENTRAL EUROPE</span><strong data-clock="Europe/Paris">--:--:--</strong><small>CEST · EUROPE</small></div>
+                        <div><span>EASTERN TIME</span><strong data-clock="America/New_York">--:--:--</strong><small>ET · NEW YORK</small></div>
+                    </div>
+                </div>
+                <div class="journey-panel" aria-label="Interactive journey preview">
+                    <div class="panel-topline"><span>THE JOURNEY, CONSIDERED</span><span class="panel-index">01 / 03</span></div>
+                    <div class="route-visual"><div class="route-point"><i></i><span>YOUR STARTING POINT</span></div><div class="route-path"><span class="route-car">✦</span></div><div class="route-point"><i></i><span>WHERE YOU’RE GOING</span></div></div>
+                    <div class="panel-rule"></div>
+                    <div class="lens-label">A clearer view of every trip</div>
+                    <div class="lens-tabs" role="tablist" aria-label="Choose trip metric">
+                        <button class="lens-tab is-active" type="button" role="tab" aria-selected="true" data-lens="time">Time</button>
+                        <button class="lens-tab" type="button" role="tab" aria-selected="false" data-lens="cost">Cost</button>
+                        <button class="lens-tab" type="button" role="tab" aria-selected="false" data-lens="impact">Impact</button>
+                    </div>
+                    <div class="lens-readout" aria-live="polite"><strong data-lens-value>One trip. More perspective.</strong><span data-lens-copy>Compare journey times across the ways you can travel.</span></div>
+                    <div class="panel-foot"><span><i class="fas fa-location-dot"></i> Built for the UAE</span><span>YOUR CHOICE, IN CONTEXT</span></div>
+                </div>
+            </div>
+            <div class="hero-bottom-note"><span>01 — CHOOSE YOUR ROUTE</span><span>SCROLL TO EXPLORE <b>↓</b></span></div>
+        </header>
+        <div class="mobility-rail" aria-label="Ikhtiyar compares transport options"><div class="rail-track">
+            <span>DRIVE WITH INTENTION</span><i>✳</i><span>TAKE THE METRO</span><i>✳</i><span>WALK A LITTLE FURTHER</span><i>✳</i><span>LEAVE A LIGHTER TRACE</span><i>✳</i><span>DRIVE WITH INTENTION</span><i>✳</i><span>TAKE THE METRO</span><i>✳</i><span>WALK A LITTLE FURTHER</span><i>✳</i><span>LEAVE A LIGHTER TRACE</span><i>✳</i>
+        </div></div>
+        <section class="manifesto-section" id="how-it-works">
+            <div class="container manifesto-layout">
+                <div class="manifesto-heading reveal-on-scroll"><span class="section-kicker">A DIFFERENT KIND OF ROUTE PLANNER</span><h2>The best route<br>is the one that<br><em>fits your day.</em></h2></div>
+                <div class="manifesto-content reveal-on-scroll"><p>Not just distance from A to B. A better decision starts when the whole picture comes into focus.</p>
+                    <div class="feature-list">
+                        <article class="feature-row"><span class="feature-number">01</span><div><h3>See the full picture</h3><p>Compare time, estimated cost and emissions across six ways to travel.</p></div><span class="feature-mark">↗</span></article>
+                        <article class="feature-row"><span class="feature-number">02</span><div><h3>Make impact visible</h3><p>Track your journeys, understand your footprint and celebrate what you save.</p></div><span class="feature-mark">↗</span></article>
+                        <article class="feature-row"><span class="feature-number">03</span><div><h3>Let better habits add up</h3><p>Personalized recommendations become more relevant with every recorded trip.</p></div><span class="feature-mark">↗</span></article>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="closing-section"><div class="container closing-inner reveal-on-scroll"><span class="section-kicker">YOUR NEXT JOURNEY, REIMAGINED</span><h2>A little more<br><em>thought goes far.</em></h2><a href="{{ url_for('register') }}" class="btn btn-light">Start with Ikhtiyar <span class="arrow-nudge" aria-hidden="true">↗</span></a></div></section>
+        <section class="faq-section container reveal-on-scroll" aria-labelledby="faq-title"><div class="faq-intro"><span class="section-kicker">GOOD TO KNOW</span><h2 id="faq-title">A few things,<br>made clear.</h2></div><div class="faq-list">
+            <details class="faq-item"><summary>What can I compare with Ikhtiyar?</summary><p>Compare driving, taxi, metro, bus, walking and cycling for estimated journey time, cost and carbon emissions.</p></details>
+            <details class="faq-item"><summary>Does Ikhtiyar learn from my trips?</summary><p>Yes. As you record journeys, the app can build personalized transport recommendations based on your travel history.</p></details>
+            <details class="faq-item"><summary>Is Ikhtiyar made for travel in the UAE?</summary><p>Ikhtiyar is designed around UAE travel, including local fare and cost estimates where available.</p></details>
+        </div></section>
+    </main>
+    {% include 'components/footer.html' %}
+    <script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
+</body>
+</html>

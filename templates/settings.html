@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#c6a66b">
+    <title>Settings — Ikhtiyar</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body class="settings-page">
+<div class="page-wrapper">
+    <nav class="navbar" aria-label="Main navigation">
+        <div class="container">
+            <a href="/home" class="logo" aria-label="Ikhtiyar home">
+                <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
+            </a>
+            <div class="nav-links">
+                <a href="/home">Home</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/history">History</a>
+                <a href="/settings" class="active" aria-current="page">Settings</a>
+            </div>
+            <div class="nav-user-section">
+                <span class="nav-divider" aria-hidden="true"></span>
+                <span class="nav-username">{{ username }}</span>
+                <a href="/logout" class="logout-link" aria-label="Sign out"><i class="fas fa-arrow-right-from-bracket" aria-hidden="true"></i></a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <header class="page-intro reveal-on-scroll">
+                <div><span class="page-kicker">YOUR ACCOUNT</span><h1>Settings</h1><p>Shape your journeys and choose how Ikhtiyar uses your trip data.</p></div>
+            </header>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="settings-flashes" aria-live="polite">
+                    {% for category, message in messages %}
+                        <div class="settings-flash {{ category }}" role="status">{{ message }}</div>
+                    {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="settings-layout">
+                <nav class="settings-tabs" aria-label="Settings sections">
+                    <a class="tab {% if active_tab == 'profile' %}active{% endif %}" href="{{ url_for('settings', tab='profile') }}" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="{{ 'true' if active_tab == 'profile' else 'false' }}" {% if active_tab == 'profile' %}aria-current="page"{% endif %} data-settings-tab="profile"><i class="fa-regular fa-user" aria-hidden="true"></i> Profile</a>
+                    <a class="tab {% if active_tab == 'preferences' %}active{% endif %}" href="{{ url_for('settings', tab='preferences') }}" role="tab" id="tab-preferences" aria-controls="panel-preferences" aria-selected="{{ 'true' if active_tab == 'preferences' else 'false' }}" {% if active_tab == 'preferences' %}aria-current="page"{% endif %} data-settings-tab="preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Preferences</a>
+                    <a class="tab {% if active_tab == 'privacy' %}active{% endif %}" href="{{ url_for('settings', tab='privacy') }}" role="tab" id="tab-privacy" aria-controls="panel-privacy" aria-selected="{{ 'true' if active_tab == 'privacy' else 'false' }}" {% if active_tab == 'privacy' %}aria-current="page"{% endif %} data-settings-tab="privacy"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Privacy</a>
+                </nav>
+
+                <section class="settings-panel {% if active_tab == 'profile' %}active{% endif %}" id="panel-profile" role="tabpanel" aria-labelledby="tab-profile" data-settings-panel="profile" {% if active_tab != 'profile' %}hidden{% endif %}>
+                    <div class="settings-card">
+                        <div class="settings-card-heading"><div><span class="page-kicker">ACCOUNT DETAILS</span><h2>Your profile</h2><p>These details identify your Ikhtiyar account.</p></div><span class="settings-card-icon"><i class="fa-regular fa-id-card" aria-hidden="true"></i></span></div>
+                        <form method="post" action="{{ url_for('settings', tab='profile') }}" class="settings-form profile-edit-form">
+                            <input type="hidden" name="action" value="profile">
+                            <div class="profile-edit-grid">
+                                <label for="profile-username">Username<input id="profile-username" class="form-control" type="text" name="username" value="{{ user.username or username }}" minlength="2" maxlength="50" autocomplete="username" required></label>
+                                <label for="profile-email">Email address<input id="profile-email" class="form-control" type="email" name="email" value="{{ user.email or email }}" maxlength="254" autocomplete="email" required></label>
+                            </div>
+                            <div class="password-change-block">
+                                <div class="password-change-heading"><h3>Change password <span>OPTIONAL</span></h3><p>Leave these fields blank to keep your current password.</p></div>
+                                <div class="password-change-grid">
+                                    <label for="current-password">Current password<input id="current-password" class="form-control" type="password" name="current_password" autocomplete="current-password"></label>
+                                    <span class="password-grid-spacer" aria-hidden="true"></span>
+                                    <label for="new-password">New password<input id="new-password" class="form-control" type="password" name="new_password" minlength="8" autocomplete="new-password"><small>Use at least 8 characters.</small></label>
+                                    <label for="confirm-password">Confirm new password<input id="confirm-password" class="form-control" type="password" name="confirm_password" minlength="8" autocomplete="new-password"></label>
+                                </div>
+                            </div>
+                            {% if user.created_at %}<p class="profile-member-since">Member since <strong>{{ user.created_at }}</strong></p>{% endif %}
+                            <div class="settings-form-actions"><p>Account details update as soon as you save.</p><button type="submit" class="btn btn-primary"><i class="fa-solid fa-check" aria-hidden="true"></i> Save account details</button></div>
+                        </form>
+                    </div>
+                </section>
+
+                <section class="settings-panel {% if active_tab == 'preferences' %}active{% endif %}" id="panel-preferences" role="tabpanel" aria-labelledby="tab-preferences" data-settings-panel="preferences" {% if active_tab != 'preferences' %}hidden{% endif %}>
+                    <div class="settings-card">
+                        <div class="settings-card-heading"><div><span class="page-kicker">HOW YOU LIKE TO TRAVEL</span><h2>Travel preferences</h2><p>These weights help choose the recommended option when you compare routes.</p></div><span class="settings-card-icon"><i class="fa-solid fa-compass" aria-hidden="true"></i></span></div>
+                        <form method="post" action="{{ url_for('settings', tab='preferences') }}" class="settings-form">
+                            <input type="hidden" name="action" value="preferences">
+                            <div class="preference-sliders">
+                                <label class="preference-control" for="priority-speed"><span class="preference-label"><span><i class="fa-solid fa-bolt" aria-hidden="true"></i> Speed priority</span><output data-range-output="priority-speed">{{ prefs.priority_speed|default(5) }}/10</output></span><small>How important is arriving sooner?</small><input id="priority-speed" type="range" name="priority_speed" min="1" max="10" value="{{ prefs.priority_speed|default(5) }}" data-range-input></label>
+                                <label class="preference-control" for="priority-cost"><span class="preference-label"><span><i class="fa-solid fa-wallet" aria-hidden="true"></i> Cost priority</span><output data-range-output="priority-cost">{{ prefs.priority_cost|default(5) }}/10</output></span><small>How strongly should the app favour lower fares?</small><input id="priority-cost" type="range" name="priority_cost" min="1" max="10" value="{{ prefs.priority_cost|default(5) }}" data-range-input></label>
+                                <label class="preference-control" for="priority-environment"><span class="preference-label"><span><i class="fa-solid fa-leaf" aria-hidden="true"></i> Environment priority</span><output data-range-output="priority-environment">{{ prefs.priority_environment|default(5) }}/10</output></span><small>How much weight should lower emissions receive?</small><input id="priority-environment" type="range" name="priority_environment" min="1" max="10" value="{{ prefs.priority_environment|default(5) }}" data-range-input></label>
+                            </div>
+                            <div class="preference-number-grid">
+                                <label for="max-walking-temp">Walking comfort limit <span>°C</span><input id="max-walking-temp" class="form-control" type="number" name="max_walking_temp" min="20" max="55" step="1" value="{{ prefs.max_walking_temp|default(40) }}" required></label>
+                                <label for="budget-per-trip">Preferred trip budget <span>AED</span><input id="budget-per-trip" class="form-control" type="number" name="budget_per_trip" min="0" max="10000" step="5" value="{{ prefs.budget_per_trip|default(50) }}" required><small>Enter 0 if you do not want a budget preference.</small></label>
+                            </div>
+                            <div class="settings-form-actions"><p>Saved preferences are used in future route comparisons.</p><button type="submit" class="btn btn-primary"><i class="fa-solid fa-check" aria-hidden="true"></i> Save preferences</button></div>
+                        </form>
+                    </div>
+                </section>
+
+                <section class="settings-panel {% if active_tab == 'privacy' %}active{% endif %}" id="panel-privacy" role="tabpanel" aria-labelledby="tab-privacy" data-settings-panel="privacy" {% if active_tab != 'privacy' %}hidden{% endif %}>
+                    <div class="settings-card">
+                        <div class="settings-card-heading"><div><span class="page-kicker">YOUR DATA, YOUR CHOICE</span><h2>Privacy controls</h2><p>Manage what Ikhtiyar keeps for your account and recommendations.</p></div><span class="settings-card-icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span></div>
+                        <form method="post" action="{{ url_for('settings', tab='privacy') }}" class="settings-form privacy-form">
+                            <input type="hidden" name="action" value="privacy">
+                            <label class="privacy-option" for="save-trip-history"><span class="privacy-copy"><strong>Save selected trips to my history</strong><small>When turned off, new transport selections are not stored and will not change your trip history or dashboard totals.</small></span><span class="switch-control"><input id="save-trip-history" type="checkbox" name="save_trip_history" {% if privacy.save_trip_history %}checked{% endif %}><span class="switch-track" aria-hidden="true"></span></span></label>
+                            <label class="privacy-option" for="personalized-recommendations"><span class="privacy-copy"><strong>Personalized destination suggestions</strong><small>When turned off, Ikhtiyar will not generate or return personalized destination recommendations for your account.</small></span><span class="switch-control"><input id="personalized-recommendations" type="checkbox" name="personalized_recommendations" {% if privacy.personalized_recommendations %}checked{% endif %}><span class="switch-track" aria-hidden="true"></span></span></label>
+                            <div class="privacy-actions"><div><span class="page-kicker">TAKE A COPY WITH YOU</span><p>Download a CSV export of your saved trip history.</p></div><a class="btn btn-outline" href="{{ url_for('export_personal_data') }}"><i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i> Export my trip data</a></div>
+                            <div class="settings-form-actions"><p>Your choices are saved to your account.</p><button type="submit" class="btn btn-primary"><i class="fa-solid fa-check" aria-hidden="true"></i> Save privacy choices</button></div>
+                        </form>
+                        <p class="settings-note privacy-note"><i class="fa-solid fa-lock" aria-hidden="true"></i> Disabling trip history only affects future selections; existing history remains available until you choose to manage it separately.</p>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    {% include 'components/footer.html' %}
+</div>
+<script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/settings-interactions.js') }}" defer></script>
+</body>
+</html>

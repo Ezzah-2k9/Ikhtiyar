@@ -1,0 +1,30 @@
+
+services:
+  - type: web
+    name: ikhtiyar
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: LOCATIONIQ_KEY
+        value: pk.8a75041bffb1400f168ef630c9a0266e
+      - key: ORS_KEY
+        value: eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImY0YTA2NDJmNTYzYjQ2YWE5YmI4OTdkZmM4M2RmYzQxIiwiaCI6Im11cm11cjY0In0=
+      - key: TOMTOM_KEY
+        value: o5n5p3980UDR7FlNkrTQDdZS7OTTjJtO
+      - key: GRAPHHOPPER_KEY
+        value: d639e61b-d9b1-49cd-9b41-e67dfa98e7b5
+      - key: GEOAPIFY_KEY
+        value: 336bad390efc4b0aab94eb5177500db7
+      - key: OPENWEATHER_KEY
+        value: 78bde2e12065032bce998a7daf162268
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ikhtiyar-db
+          property: connectionString
+databases:
+  - name: ikhtiyar-db
+    databaseName: ikhtiyar
+    user: ikhtiyar_user

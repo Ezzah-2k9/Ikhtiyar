@@ -1,0 +1,265 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDFKit Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfkit/0.13.0/pdfkit.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/blob-stream/3.0.0/BlobStream.js"></script>
+</head>
+<body>
+    <h1>PDFKit Test for Ikhtiyar</h1>
+    <button onclick="generateTestPDF()">Generate Test PDF</button>
+    
+    <script>
+        // Sample data similar to dashboard
+        const testData = {
+            username: "TestUser",
+            stats: {
+                total_trips: 15,
+                co2_saved: 25.5,
+                total_cost: 150.75,
+                green_points: 120
+            },
+            recent: [
+                {
+                    origin_name: "Dubai Mall",
+                    destination_name: "Burj Khalifa",
+                    chosen_transport: "metro",
+                    distance_km: 5.2,
+                    chosen_cost: 7.5,
+                    co2_saved: 2.1
+                },
+                {
+                    origin_name: "Home",
+                    destination_name: "Office",
+                    chosen_transport: "bus",
+                    distance_km: 8.7,
+                    chosen_cost: 5.0,
+                    co2_saved: 3.4
+                }
+            ]
+        };
+
+        function generateTestPDF() {
+            try {
+                // Create PDF document
+                const doc = new PDFDocument({
+                    size: 'A4',
+                    margins: { top: 50, bottom: 50, left: 50, right: 50 }
+                });
+                
+                // Create stream for download
+                const stream = doc.pipe(new BlobStream());
+                
+                // Add custom font support and colors
+                const colors = {
+                    primary: '#5D1F1A',
+                    accent: '#D4AF37',
+                    light: '#F8F4E6',
+                    text: '#2C2416'
+                };
+                
+                // Header Section
+                doc.fillColor(colors.primary)
+                   .rect(0, 0, doc.page.width, 120)
+                   .fill();
+                
+                // Logo and Title
+                doc.fillColor(colors.accent)
+                   .font('Helvetica-Bold')
+                   .fontSize(32)
+                   .text('اختيار', 50, 40, { align: 'left' });
+                
+                doc.fillColor('white')
+                   .font('Helvetica-Bold')
+                   .fontSize(28)
+                   .text('IKHTIYAR', 140, 45, { align: 'left' });
+                
+                doc.fillColor('white')
+                   .font('Helvetica')
+                   .fontSize(14)
+                   .text('Activity Report', 50, 80, { align: 'left' });
+                
+                // Report Info
+                doc.fillColor(colors.text)
+                   .font('Helvetica')
+                   .fontSize(11)
+                   .text(`Generated for: ${testData.username}`, 400, 40, { align: 'right' });
+                
+                const currentDate = new Date().toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                doc.text(`Date: ${currentDate}`, 400, 55, { align: 'right' });
+                
+                // Decorative line
+                doc.strokeColor(colors.accent)
+                   .lineWidth(2)
+                   .moveTo(50, 110)
+                   .lineTo(doc.page.width - 50, 110)
+                   .stroke();
+                
+                let yPosition = 140;
+                
+                // Statistics Section
+                doc.fillColor(colors.primary)
+                   .font('Helvetica-Bold')
+                   .fontSize(18)
+                   .text('Summary Statistics', 50, yPosition);
+                
+                yPosition += 30;
+                
+                // Stats Cards Layout
+                const stats = testData.stats;
+                const statItems = [
+                    { label: 'Total Trips', value: stats.total_trips || 0, icon: '🚗' },
+                    { label: 'CO₂ Saved', value: `${(stats.co2_saved || 0).toFixed(2)} kg`, icon: '🌿' },
+                    { label: 'Total Cost', value: `${(stats.total_cost || 0).toFixed(2)} AED`, icon: '💰' },
+                    { label: 'Green Points', value: stats.green_points || 0, icon: '⭐' }
+                ];
+                
+                // Create stats grid
+                const cardWidth = 120;
+                const cardHeight = 80;
+                const spacing = 15;
+                let xPos = 50;
+                
+                statItems.forEach((stat, index) => {
+                    // Card background
+                    doc.fillColor(index % 2 === 0 ? colors.light : '#FFFFFF')
+                       .roundedRect(xPos, yPosition, cardWidth, cardHeight, 8)
+                       .fill();
+                    
+                    // Card border
+                    doc.strokeColor(colors.accent)
+                       .lineWidth(1)
+                       .roundedRect(xPos, yPosition, cardWidth, cardHeight, 8)
+                       .stroke();
+                    
+                    // Icon
+                    doc.fontSize(20)
+                       .text(stat.icon, xPos + 10, yPosition + 10);
+                    
+                    // Label
+                    doc.fillColor(colors.text)
+                       .font('Helvetica')
+                       .fontSize(10)
+                       .text(stat.label, xPos + 10, yPosition + 40);
+                    
+                    // Value
+                    doc.fillColor(colors.primary)
+                       .font('Helvetica-Bold')
+                       .fontSize(16)
+                       .text(stat.value, xPos + 10, yPosition + 55);
+                    
+                    xPos += cardWidth + spacing;
+                    if ((index + 1) % 2 === 0) {
+                        xPos = 50;
+                        yPosition += cardHeight + 20;
+                    }
+                });
+                
+                yPosition += 30;
+                
+                // Recent Trips Section
+                doc.fillColor(colors.primary)
+                   .font('Helvetica-Bold')
+                   .fontSize(18)
+                   .text('Recent Trips', 50, yPosition);
+                
+                yPosition += 25;
+                
+                if (testData.recent && testData.recent.length > 0) {
+                    // Table header
+                    doc.fillColor(colors.primary)
+                       .rect(50, yPosition, doc.page.width - 100, 25)
+                       .fill();
+                    
+                    doc.fillColor('white')
+                       .font('Helvetica-Bold')
+                       .fontSize(11)
+                       .text('Route', 60, yPosition + 8);
+                    doc.text('Transport', 250, yPosition + 8);
+                    doc.text('Distance', 350, yPosition + 8);
+                    doc.text('Cost', 420, yPosition + 8);
+                    doc.text('CO₂ Saved', 480, yPosition + 8);
+                    
+                    yPosition += 25;
+                    
+                    // Table rows
+                    testData.recent.forEach((trip, index) => {
+                        // Alternate row colors
+                        if (index % 2 === 0) {
+                            doc.fillColor('#F8F4E6')
+                               .rect(50, yPosition, doc.page.width - 100, 20)
+                               .fill();
+                        }
+                        
+                        const route = `${trip.origin_name || 'Unknown'} → ${trip.destination_name || 'Unknown'}`;
+                        const transport = trip.chosen_transport ? trip.chosen_transport.title() : 'Unknown';
+                        const distance = `${(trip.distance_km || 0).toFixed(1)} km`;
+                        const cost = `${(trip.chosen_cost || 0).toFixed(2)} AED`;
+                        const co2Saved = trip.co2_saved > 0 ? `-${trip.co2_saved.toFixed(2)} kg` : '0 kg';
+                        
+                        doc.fillColor(colors.text)
+                           .font('Helvetica')
+                           .fontSize(10)
+                           .text(route, 60, yPosition + 5, { width: 180 });
+                        doc.text(transport, 250, yPosition + 5);
+                        doc.text(distance, 350, yPosition + 5);
+                        doc.text(cost, 420, yPosition + 5);
+                        doc.fillColor(trip.co2_saved > 0 ? '#27AE60' : colors.text)
+                           .text(co2Saved, 480, yPosition + 5);
+                        
+                        yPosition += 20;
+                    });
+                }
+                
+                // Footer
+                yPosition = doc.page.height - 100;
+                
+                doc.fillColor(colors.light)
+                   .rect(0, yPosition - 20, doc.page.width, 100)
+                   .fill();
+                
+                doc.strokeColor(colors.accent)
+                   .lineWidth(1)
+                   .moveTo(50, yPosition - 20)
+                   .lineTo(doc.page.width - 50, yPosition - 20)
+                   .stroke();
+                
+                doc.fillColor(colors.primary)
+                   .font('Helvetica-Oblique')
+                   .fontSize(11)
+                   .text('Thank you for using Ikhtiyar - Your Smart Transport Choice', 50, yPosition, { align: 'center' });
+                
+                doc.fillColor(colors.text)
+                   .fontSize(9)
+                   .text('Making sustainable transportation decisions for a greener future', 50, yPosition + 20, { align: 'center' });
+                
+                // Finalize PDF
+                doc.end();
+                
+                // Handle download
+                stream.on('finish', function() {
+                    const blob = stream.toBlob('application/pdf');
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `ikhtiyar-test-report-${testData.username}-${new Date().toISOString().split('T')[0]}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    alert('PDF generated successfully!');
+                });
+                
+            } catch (error) {
+                console.error('PDF generation error:', error);
+                alert('Failed to generate PDF: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

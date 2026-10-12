@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in — Ikhtiyar</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css', v='auth-logo-lower-2') }}">
+</head>
+<body><main class="auth-wrapper"><section class="auth-card" aria-labelledby="auth-title">
+    <a href="/" class="logo" aria-label="Ikhtiyar home"><img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')"></a>
+    <h2 id="auth-title">Welcome back</h2><p class="auth-subtitle">Sign in to continue planning smarter journeys.</p>
+    {% with messages = get_flashed_messages() %}{% if messages %}<div role="alert" style="background:#fbefed;color:#984a42;padding:11px 13px;border-radius:9px;margin-bottom:18px;font-size:13px">{{ messages[0] }}</div>{% endif %}{% endwith %}
+    <form action="{{ url_for('login') }}" method="POST">
+        <div class="form-group"><label for="identifier">Username or email</label><input id="identifier" type="text" name="identifier" class="form-control" autocomplete="username" required></div>
+        <div class="form-group"><label for="password">Password</label><input id="password" type="password" name="password" class="form-control" autocomplete="current-password" required></div>
+        <button type="submit" class="btn btn-primary" style="width:100%">Sign in</button>
+    </form><div class="auth-switch">New to Ikhtiyar? <a href="{{ url_for('register') }}">Create an account</a></div>
+</section></main>
+{% include 'components/footer.html' %}
+    <script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
+</body></html>
