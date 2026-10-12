@@ -34,5 +34,4 @@ databases:
     databaseName: ikhtiyar_v2
     user: ikhtiyar_v2_user
     region: singapore
-    # Plan deliberately omitted pending your choice; Render's current default is 0.1c-256mb (paid).
-    # Use plan: free only for a temporary demo; free Postgres expires after 30 days and is later deleted.
+    plan: free
