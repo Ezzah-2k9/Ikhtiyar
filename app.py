@@ -318,6 +318,13 @@ def dashboard():
     # Recent trips
     history = db.get_history(session['user_id'])
     recent = history[:5]
+    # psycopg2 returns DATE/TIME columns as Python objects. Flask's JSON
+    # serializer cannot encode datetime.time values in the dashboard's tojson block.
+    for trip in recent:
+        for field in ('trip_date', 'trip_time'):
+            value = trip.get(field)
+            if hasattr(value, 'isoformat'):
+                trip[field] = value.isoformat()
     
     return render_template('dashboard.html', stats=stats, recent=recent, username=session['username'])
 
