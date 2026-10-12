@@ -1,0 +1,22 @@
+# Local environment secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and backups
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Python environments and generated files
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# OS / editor files
+.DS_Store
+.vscode/
+.idea/

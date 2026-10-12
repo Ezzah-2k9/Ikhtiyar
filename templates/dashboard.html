@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - Ikhtiyar</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body class="dashboard-page">
+    <div class="page-wrapper">
+        <nav class="navbar">
+            <div class="container">
+                <a href="/home" class="logo">
+                    <picture class="brand-picture">
+                        <source media="(max-width: 650px)" srcset="{{ url_for('static', filename='images/ikhtiyar-black.png') }}">
+                        <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
+                    </picture>
+                    
+                </a>
+                <div class="nav-links">
+                    <a href="/home">Home</a>
+                    <a href="/dashboard" class="active">Dashboard</a>
+                    <a href="/history">History</a>
+                    <a href="/settings">Settings</a>
+                </div>
+                <div class="nav-user-section">
+                    <div class="nav-divider"></div>
+                    <div class="nav-username">{{ username }}</div>
+                    <a href="/logout" class="logout-link">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <div class="container">
+                <header class="page-intro reveal-on-scroll"><div><span class="page-kicker">YOUR MOBILITY AT A GLANCE</span><h1>Welcome, {{ username }}.</h1><p>Track your transport habits and environmental impact.</p></div><a class="quiet-link" href="/home">Plan a new trip <span aria-hidden="true">↗</span></a></header>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="fas fa-route"></i>
+                        <h3>Total Trips</h3>
+                        <span class="stat-value">{{ stats.total_trips }}</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-leaf"></i>
+                        <h3>CO₂ Saved</h3>
+                        <span class="stat-value">{{ "%.2f"|format(stats.co2_saved) }} kg</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-money-bill-wave"></i>
+                        <h3>Total Cost</h3>
+                        <span class="stat-value">{{ "%.2f"|format(stats.total_cost) }} AED</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-fire"></i>
+                        <h3>Green Points</h3>
+                        <span class="stat-value">{{ stats.green_points or 0 }}</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Recent Activity</h2>
+                    <p>Your latest trips and their environmental impact.</p>
+                    
+                    {% if recent %}
+                    <div class="recent-trips">
+                        {% for trip in recent %}
+                        <div class="trip-item">
+                            <div class="trip-info">
+                                <strong>{{ trip.origin_name }}</strong> → <strong>{{ trip.destination_name }}</strong>
+                                <span class="trip-transport">{{ trip.chosen_transport.title() }}</span>
+                            </div>
+                            <div class="trip-details">
+                                <span class="trip-date">{{ trip.trip_date }}</span>
+                                <span class="trip-distance">{{ "%.1f"|format(trip.distance_km) }} km</span>
+                                <span class="trip-cost">{{ "%.2f"|format(trip.chosen_cost) }} AED</span>
+                                {% if trip.co2_saved > 0 %}
+                                <span class="trip-co2-saved">-{{ "%.2f"|format(trip.co2_saved) }} kg CO₂</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p>No trips yet. Start your first trip to see your activity here!</p>
+                    {% endif %}
+                </div>
+
+                <!-- PDF Download Section -->
+                <div class="card pdf-download-section">
+                    <div class="pdf-header">
+                        <div class="pdf-info">
+                            <h2><i class="fas fa-file-pdf"></i> Export Your Activity</h2>
+                            <p>Download a beautifully formatted PDF report of your recent trips and environmental impact.</p>
+                        </div>
+                        <div class="pdf-preview" aria-hidden="true">
+                            <div class="pdf-sheet-preview">
+                                <span class="pdf-sheet-brand">IKHTIAR</span>
+                                <span class="pdf-sheet-rule"></span>
+                                <strong>ACTIVITY REPORT</strong>
+                                <small>JOURNEYS · COST · IMPACT</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="pdf-actions">
+                        <button type="button" class="btn btn-primary pdf-btn" id="download-report">
+                            <i class="fas fa-download" aria-hidden="true"></i>
+                            Download activity report
+                        </button>
+                        <span class="pdf-status" id="pdf-status" role="status" aria-live="polite"></span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Include Footer -->
+        {% include 'components/footer.html' %}
+    </div>
+
+    <script type="application/json" id="dashboard-data">
+        {
+            "username": {{ username | tojson }},
+            "stats": {{ stats | tojson }},
+            "recent": {{ recent | tojson }}
+        }
+    </script>
+    <script src="{{ url_for('static', filename='js/dashboard-pdf.js') }}" defer></script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
+    <script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
+</body>
+
+</html>

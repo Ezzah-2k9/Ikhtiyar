@@ -1,0 +1,896 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Route Calculator - Ikhtiyar</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+
+    <style>
+        :root {
+            --primary-teal: #1A4F4D;
+            --accent-teal: #2D8A85;
+            --accent-red: #E63946;
+            --background-light: #F0F8F8;
+            --text-dark: #1A1A1A;
+            --text-medium: #4A4A4A;
+            --border-color: #E0E8E8;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            
+            /* Legacy aliases */
+            --primary-maroon: var(--primary-teal);
+            --accent-gold: var(--accent-teal);
+            --cream: var(--background-light);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Be Vietnam Pro', sans-serif;
+            background: var(--background-light);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .page-wrapper { min-height: 100vh; display: flex; flex-direction: column; }
+        .main-content { flex: 1; padding: 2rem 0; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+        .calculator-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .calculator-sidebar {
+            background: white;
+            padding: 2rem;
+            border-radius: var(--radius-lg);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            height: fit-content;
+        }
+
+        .calculator-sidebar h3 {
+            color: var(--primary-teal);
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+        }
+
+        .form-group { margin-bottom: 1.5rem; }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.8rem;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-family: 'Be Vietnam Pro', sans-serif;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-teal);
+        }
+
+        .btn {
+            background: var(--primary-teal);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: var(--radius-md);
+            font-family: 'Be Vietnam Pro', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: var(--accent-teal);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(26, 79, 77, 0.3);
+        }
+
+        .btn-full-width { width: 100%; justify-content: center; }
+
+        hr { border: none; height: 1px; background: var(--border-color); margin: 1.5rem 0; }
+
+        .results-sidebar {
+            background: var(--background-light);
+            padding: 2rem;
+            border-radius: var(--radius-md);
+            border-top: 4px solid var(--accent-teal);
+            margin-top: 1.5rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .transport-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .transport-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .transport-card.recommended {
+            border-color: var(--accent-red);
+            position: relative;
+        }
+
+        .badge-gold {
+            background: var(--accent-red);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .transport-card h3 {
+            color: var(--primary-teal);
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-row:last-child { border-bottom: none; }
+        .stat-row strong { color: var(--primary-teal); }
+
+        .transport-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .transport-buttons .btn {
+            flex: 1;
+            justify-content: center;
+            font-size: 0.9rem;
+            padding: 0.6rem 1rem;
+        }
+
+        .btn-secondary {
+            background: var(--text-medium);
+        }
+
+        .btn-secondary:hover { background: var(--primary-teal); }
+
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--background-light);
+            border-top: 5px solid var(--primary-teal);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .map-container {
+            background: #E8F0F0;
+            overflow: hidden;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            min-height: 500px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+        }
+
+        /* Hide default routing instructions box */
+        .leaflet-routing-container {
+            display: none !important;
+        }
+
+        .custom-marker {
+            background: transparent !important;
+            border: none !important;
+        }
+
+        /* AI Banner */
+        .ai-banner {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px 20px;
+            border-radius: var(--radius-md);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .ai-banner i { font-size: 24px; }
+
+        .ai-banner strong { display: block; margin-bottom: 5px; }
+
+        .ai-progress-track {
+            background: rgba(0, 0, 0, 0.1);
+            height: 6px;
+            width: 220px;
+            margin-top: 8px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .ai-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-teal), var(--accent-teal));
+            border-radius: 3px;
+            transition: width 0.5s;
+        }
+
+        .ai-recommendations-section { margin: 30px 0; }
+        .ai-recommendations-section h3 {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--primary-teal);
+        }
+        .ai-recommendations-section h3 i { color: var(--accent-teal); }
+
+        /* Modal */
+        .transport-modal {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: var(--radius-lg);
+            max-width: 650px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            background: var(--primary-teal);
+            color: white;
+            padding: 15px 20px;
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 { margin: 0; font-size: 1.2rem; }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .modal-body { padding: 20px; }
+
+        .detail-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .detail-stat {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: var(--background-light);
+            border-radius: var(--radius-md);
+            border-left: 4px solid var(--accent-teal);
+        }
+
+        .detail-stat i {
+            font-size: 1.2rem;
+            color: var(--primary-teal);
+            width: 20px;
+        }
+
+        #detailMapContainer {
+            height: 300px;
+            border-radius: var(--radius-md);
+            margin-top: 15px;
+        }
+
+        @media (max-width: 900px) {
+            .calculator-layout { grid-template-columns: 1fr; }
+            .map-container { min-height: 400px; }
+            #map { min-height: 400px; }
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
+</head>
+
+<body class="calculator-page">
+    <div class="page-wrapper">
+        <nav class="navbar">
+            <div class="container">
+                <a href="/home" class="logo">
+                    <picture class="brand-picture">
+                        <source media="(max-width: 650px)" srcset="{{ url_for('static', filename='images/ikhtiyar-black.png') }}">
+                        <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
+                    </picture>
+                    
+                </a>
+                <div class="nav-links">
+                    <a href="/home" class="active">Calculator</a>
+                    <a href="/dashboard">Dashboard</a>
+                    <a href="/history">History</a>
+                    <a href="/settings">Settings</a>
+                </div>
+                <div class="nav-user-section">
+                    <div class="nav-divider"></div>
+                    <div class="nav-username">{{ username }}</div>
+                    <a href="/logout" class="logout-link"><i class="fas fa-sign-out-alt"></i></a>
+                </div>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <div class="container calculator-container" style="margin-top: 20px;">
+                <header class="page-intro calculator-intro reveal-on-scroll"><div><span class="page-kicker">A MORE THOUGHTFUL WAY TO TRAVEL</span><h1>Find your better route.</h1><p>Compare your options by time, cost and impact.</p></div><span class="calculator-index">01 <i>—</i> PLAN</span></header>
+
+                {% if trip_count < 10 %}
+                <div class="ai-banner">
+                    <i class="fas fa-robot"></i>
+                    <div>
+                        <strong>AI learning in progress:</strong> {{ 10 - trip_count }} more trips needed to activate personalized recommendations.
+                        <div class="ai-progress-track">
+                            <div class="ai-progress-fill" style="width: {{ (trip_count / 10 * 100)|round|int }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="ai-banner" style="background: linear-gradient(135deg, #d4edda, #c3e6cb); color: #155724;">
+                    <i class="fas fa-robot"></i>
+                    <div>
+                        <strong>AI Recommendations Ready!</strong> Personalized UAE trip suggestions based on your travel history.
+                    </div>
+                </div>
+
+                <div class="ai-recommendations-section">
+                    <h3><i class="fas fa-magic"></i> AI Trip Recommendations</h3>
+                    <p id="recommendation-status" class="recommendation-status" role="status" aria-live="polite" hidden></p>
+                    <div id="recommendations-cards" class="results-grid"></div>
+                </div>
+                {% endif %}
+
+                <div class="calculator-layout">
+                    <div class="calculator-sidebar">
+                        <h3><i class="fas fa-route"></i> Plan Your Route</h3>
+
+                        <div class="route-presets" aria-label="Example routes"><span>QUICK START</span><button type="button" data-route-origin="Dubai Mall" data-route-destination="Dubai Marina">Dubai Mall <i>→</i> Marina</button><button type="button" data-route-origin="Dubai Mall" data-route-destination="Burj Khalifa">Dubai Mall <i>→</i> Burj Khalifa</button></div>
+                        <div class="form-group">
+                            <label>Starting Point</label>
+                            <input id="origin" class="form-control" placeholder="e.g., Dubai Mall" value="Dubai Mall">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Destination</label>
+                            <input id="destination" class="form-control" placeholder="e.g., Dubai Marina" value="Dubai Marina">
+                        </div>
+
+                        <button class="btn btn-primary btn-full-width" onclick="calculateRoute()">
+                            <i class="fas fa-search"></i> Compare Options
+                        </button>
+
+                        <hr>
+
+                        <div id="results-sidebar" class="results-sidebar" style="display: none;">
+                            <h4 style="color: var(--primary-teal); margin-bottom: 1rem;">Quick Comparison</h4>
+                            <div id="quick-stats"></div>
+                        </div>
+                    </div>
+
+                    <div class="map-container">
+                        <div id="map"></div>
+                    </div>
+                </div>
+
+                <div id="results-grid" class="results-grid"></div>
+            </div>
+        </main>
+
+        <!-- Details Modal -->
+        <div id="detailsModal" class="transport-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Transport Details</h3>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="detail-stats">
+                        <div class="detail-stat">
+                            <i class="fas fa-money-bill-wave"></i>
+                            <div>
+                                <div style="font-size: 0.85rem; color: var(--text-medium);">Cost</div>
+                                <strong id="modalCost">-</strong>
+                            </div>
+                        </div>
+                        <div class="detail-stat">
+                            <i class="fas fa-clock"></i>
+                            <div>
+                                <div style="font-size: 0.85rem; color: var(--text-medium);">Time</div>
+                                <strong id="modalTime">-</strong>
+                            </div>
+                        </div>
+                        <div class="detail-stat">
+                            <i class="fas fa-road"></i>
+                            <div>
+                                <div style="font-size: 0.85rem; color: var(--text-medium);">Distance</div>
+                                <strong id="modalDistance">-</strong>
+                            </div>
+                        </div>
+                        <div class="detail-stat">
+                            <i class="fas fa-leaf"></i>
+                            <div>
+                                <div style="font-size: 0.85rem; color: var(--text-medium);">CO₂</div>
+                                <strong id="modalCO2">-</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="detailMapContainer"></div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn btn-primary btn-full-width" id="modalSelectBtn">
+                            <i class="fas fa-check"></i> SELECT THIS OPTION
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading" class="loading-overlay">
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <script>
+        let map;
+        let activeLayers = [];
+        let lastData = null;
+        let routingControl = null;
+
+        const originIcon = L.divIcon({
+            html: '<div style="background: #1A4F4D; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid #2D8A85; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">A</div>',
+            iconSize: [32, 32],
+            className: 'custom-marker'
+        });
+
+        const destinationIcon = L.divIcon({
+            html: '<div style="background: #2D8A85; color: #1A1A1A; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid #1A4F4D; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">B</div>',
+            iconSize: [32, 32],
+            className: 'custom-marker'
+        });
+
+        function initMap() {
+            map = L.map('map').setView([25.2048, 55.2708], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        function clearMap() {
+            activeLayers.forEach(layer => map.removeLayer(layer));
+            activeLayers = [];
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+            }
+        }
+
+        const originInput = document.getElementById('origin');
+        const destinationInput = document.getElementById('destination');
+        const resultsGrid = document.getElementById('results-grid');
+        const resultsSidebar = document.getElementById('results-sidebar');
+        const loading = document.getElementById('loading');
+
+        async function calculateRoute() {
+            const origin = originInput.value.trim();
+            const destination = destinationInput.value.trim();
+
+            if (!origin || !destination) {
+                alert("Please enter both origin and destination");
+                return;
+            }
+
+            loading.style.display = 'flex';
+
+            try {
+                const res = await fetch('/calculate_route', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ origin, destination })
+                });
+
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+
+                renderResults(data);
+            } catch (err) {
+                console.error(err);
+                alert(err.message || "Route calculation failed");
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function renderResults(data) {
+            clearMap();
+            resultsGrid.innerHTML = '';
+            lastData = data;
+
+            // Place origin and destination markers
+            const originMarker = L.marker([data.origin.lat, data.origin.lon], { icon: originIcon }).addTo(map);
+            const destinationMarker = L.marker([data.destination.lat, data.destination.lon], { icon: destinationIcon }).addTo(map);
+            activeLayers.push(originMarker, destinationMarker);
+
+            // --- PROPER ROUTE USING LEAFLET ROUTING MACHINE ---
+            // Get driving geometry from backend as the primary visual route
+            const drivingRoute = data.results.find(r => r.mode === 'driving');
+            const drivingWaypoints = [
+                L.latLng(data.origin.lat, data.origin.lon),
+                L.latLng(data.destination.lat, data.destination.lon)
+            ];
+
+            // If driving geometry has many points, use them as waypoints for a smooth route
+            const waypoints = [];
+            if (drivingRoute && drivingRoute.geometry && drivingRoute.geometry.length > 2) {
+                // Use backend-provided geometry directly as a polyline (most accurate)
+                const drivingPolyline = L.polyline(drivingRoute.geometry, {
+                    color: '#1A4F4D',
+                    weight: 6,
+                    opacity: 0.9
+                }).addTo(map);
+                const drivingGlow = L.polyline(drivingRoute.geometry, {
+                    color: '#2D8A85',
+                    weight: 10,
+                    opacity: 0.25
+                }).addTo(map);
+                // Ensure glow is under the main polyline
+                drivingGlow.bringToBack();
+                activeLayers.push(drivingPolyline, drivingGlow);
+            } else {
+                // Fallback: use routing machine to snap to roads
+                routingControl = L.Routing.control({
+                    waypoints: drivingWaypoints,
+                    routeWhileDragging: false,
+                    show: false,
+                    addWaypoints: false,
+                    createMarker: () => null,
+                    lineOptions: {
+                        styles: [
+                            { color: '#1A4F4D', opacity: 0.9, weight: 6 },
+                            { color: '#2D8A85', opacity: 0.3, weight: 10 }
+                        ]
+                    }
+                }).addTo(map);
+            }
+
+            map.fitBounds(L.featureGroup([originMarker, destinationMarker]).getBounds().pad(0.25));
+
+            // Render sorted cards
+            const sorted = [...data.results].sort(
+                (a, b) => (b.is_recommended === true) - (a.is_recommended === true)
+            );
+
+            sorted.forEach(res => {
+                const card = document.createElement('div');
+                card.className = `transport-card ${res.is_recommended ? 'recommended' : ''}`;
+
+                const icons = {
+                    driving: 'fa-car', taxi: 'fa-taxi', metro: 'fa-subway',
+                    bus: 'fa-bus', walking: 'fa-walking', cycling: 'fa-bicycle'
+                };
+
+                const selectBtn = document.createElement('button');
+                selectBtn.className = 'btn btn-primary';
+                selectBtn.innerHTML = '<i class="fas fa-check"></i> SELECT';
+                selectBtn.onclick = () => selectTransport(res, data.origin, data.destination, data.driving_co2_baseline);
+
+                const detailsBtn = document.createElement('button');
+                detailsBtn.className = 'btn btn-secondary';
+                detailsBtn.innerHTML = '<i class="fas fa-info-circle"></i> DETAILS';
+                detailsBtn.onclick = () => showDetails(res, data.origin, data.destination);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.className = 'transport-buttons';
+                buttonContainer.appendChild(selectBtn);
+                buttonContainer.appendChild(detailsBtn);
+
+                card.innerHTML = `
+                    ${res.is_recommended ? '<div class="badge-gold">⭐ RECOMMENDED</div>' : ''}
+                    <h3><i class="fas ${icons[res.mode] || 'fa-route'}"></i> ${res.mode.toUpperCase()}</h3>
+                    <div class="stat-row"><span>Cost</span><strong>${res.cost} AED</strong></div>
+                    <div class="stat-row"><span>Time</span><strong>${res.time} min</strong></div>
+                    <div class="stat-row"><span>Distance</span><strong>${res.distance} km</strong></div>
+                    <div class="stat-row"><span>CO₂</span><strong>${res.co2} kg</strong></div>
+                    ${res.calories > 0 ? `<div class="stat-row"><span>Calories</span><strong>${res.calories} kcal</strong></div>` : ''}
+                `;
+
+                card.appendChild(buttonContainer);
+                resultsGrid.appendChild(card);
+
+                // Draw alternative route lines (only if they have real geometry, not straight-line fallbacks)
+                if (res.geometry && res.geometry.length > 2 && res.mode !== 'driving') {
+                    L.polyline(res.geometry, {
+                        color: getTransportColor(res.mode),
+                        weight: 4,
+                        opacity: res.is_recommended ? 0.9 : 0.5,
+                        dashArray: res.is_recommended ? '' : '8, 8'
+                    }).addTo(map);
+                }
+            });
+
+            resultsSidebar.style.display = 'block';
+            updateQuickStats(data.results);
+        }
+
+        function getTransportColor(mode) {
+            const colors = {
+                driving: '#1A4F4D', taxi: '#2D8A85', metro: '#1A5F7A',
+                bus: '#2E7D32', walking: '#2E8B57', cycling: '#8B5E3C'
+            };
+            return colors[mode] || '#666666';
+        }
+
+        function getTransportIcon(mode) {
+            const icons = {
+                driving: 'fa-car', taxi: 'fa-taxi', metro: 'fa-subway',
+                bus: 'fa-bus', walking: 'fa-walking', cycling: 'fa-bicycle'
+            };
+            return icons[mode] || 'fa-route';
+        }
+
+        async function selectTransport(res, origin, destination, baseline) {
+            if (!confirm(`Confirm ${res.mode.toUpperCase()} route?`)) return;
+
+            const payload = { ...res, origin, destination, driving_co2_baseline: baseline };
+
+            try {
+                const response = await fetch('/record_trip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    if (data.saved_to_history === false) {
+                        alert('Route compared. This selection was not saved to your history, according to your privacy setting.');
+                        window.location.href = '/home';
+                        return;
+                    }
+                    alert(`Trip recorded. Estimated CO₂ saved: ${data.saved_co2} kg`);
+                    window.location.href = '/dashboard';
+                } else {
+                    alert('Failed to record trip. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error recording trip:', error);
+                alert('Failed to record trip. Please check your connection and try again.');
+            }
+        }
+
+        function showDetails(transport, origin, destination) {
+            document.getElementById('modalTitle').innerHTML =
+                `<i class="fas ${getTransportIcon(transport.mode)}"></i> ${transport.mode.toUpperCase()} Details`;
+            document.getElementById('modalCost').textContent = `${transport.cost} AED`;
+            document.getElementById('modalTime').textContent = `${transport.time} minutes`;
+            document.getElementById('modalDistance').textContent = `${transport.distance} km`;
+            document.getElementById('modalCO2').textContent = `${transport.co2} kg`;
+
+            document.getElementById('modalSelectBtn').onclick = () => {
+                closeModal();
+                const baseline = lastData ? lastData.driving_co2_baseline : 0;
+                selectTransport(transport, origin, destination, baseline);
+            };
+
+            document.getElementById('detailsModal').style.display = 'flex';
+
+            setTimeout(() => {
+                initDetailMap(transport, origin, destination);
+            }, 100);
+        }
+
+        function initDetailMap(transport, origin, destination) {
+            const container = document.getElementById('detailMapContainer');
+            container.innerHTML = '';
+            container._leaflet_id = null;
+
+            const detailMap = L.map('detailMapContainer').setView([origin.lat, origin.lon], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(detailMap);
+
+            const originMarker = L.marker([origin.lat, origin.lon], { icon: originIcon }).addTo(detailMap);
+            const destinationMarker = L.marker([destination.lat, destination.lon], { icon: destinationIcon }).addTo(detailMap);
+
+            if (transport.geometry && transport.geometry.length > 2) {
+                const polyline = L.polyline(transport.geometry, {
+                    color: getTransportColor(transport.mode),
+                    weight: 5,
+                    opacity: 0.9
+                }).addTo(detailMap);
+                detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker, polyline]).getBounds().pad(0.2));
+            } else {
+                detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker]).getBounds().pad(0.2));
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('detailsModal').style.display = 'none';
+            const c = document.getElementById('detailMapContainer');
+            c.innerHTML = '';
+            c._leaflet_id = null;
+        }
+
+        function updateQuickStats(results) {
+            const quickStats = document.getElementById('quick-stats');
+            if (!results || results.length === 0) return;
+
+            const cheapest = results.reduce((min, r) => parseFloat(r.cost) < parseFloat(min.cost) ? r : min);
+            const fastest = results.reduce((min, r) => parseFloat(r.time) < parseFloat(min.time) ? r : min);
+            const ecoFriendly = results.reduce((min, r) => parseFloat(r.co2) < parseFloat(min.co2) ? r : min);
+
+            quickStats.innerHTML = `
+                <div style="margin-bottom: 10px;"><strong>💰 Cheapest:</strong> ${cheapest.mode.toUpperCase()} (${cheapest.cost} AED)</div>
+                <div style="margin-bottom: 10px;"><strong>⚡ Fastest:</strong> ${fastest.mode.toUpperCase()} (${fastest.time} min)</div>
+                <div><strong>🌱 Most Eco:</strong> ${ecoFriendly.mode.toUpperCase()} (${ecoFriendly.co2} kg CO₂)</div>
+            `;
+        }
+
+        // ------- AI RECOMMENDATIONS -------
+        async function loadRecommendations() {
+            try {
+                const response = await fetch('/recommendations');
+                const data = await response.json();
+                if (data.personalization_disabled) {
+                    const status = document.getElementById('recommendation-status');
+                    if (status) {
+                        status.textContent = 'Personalized destination suggestions are off. You can turn them on again in Settings → Privacy.';
+                        status.hidden = false;
+                    }
+                    return;
+                }
+                if (data.ai_ready && data.recommendations.length > 0) {
+                    renderRecommendations(data.recommendations);
+                }
+            } catch (err) {
+                console.error('Failed to load recommendations:', err);
+            }
+        }
+
+        function renderRecommendations(recommendations) {
+            const container = document.getElementById('recommendations-cards');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const categoryIcons = {
+                landmark: 'fa-monument', shopping: 'fa-shopping-bag',
+                beach: 'fa-umbrella-beach', cultural: 'fa-landmark',
+                entertainment: 'fa-theater-masks', adventure: 'fa-mountain',
+                nature: 'fa-tree'
+            };
+
+            recommendations.forEach(rec => {
+                const card = document.createElement('div');
+                card.className = 'transport-card';
+                card.style.borderLeft = '4px solid var(--accent-red)';
+                card.innerHTML = `
+                    <div class="badge-gold"><i class="fas fa-robot"></i> AI RECOMMENDATION</div>
+                    <h3><i class="fas ${categoryIcons[rec.category] || 'fa-map-marker-alt'}"></i> ${rec.name}</h3>
+                    <div class="stat-row"><span>City</span><strong>${rec.city}</strong></div>
+                    <div class="stat-row"><span>Category</span><strong>${rec.category.charAt(0).toUpperCase() + rec.category.slice(1)}</strong></div>
+                    <div class="stat-row"><span>Match Score</span><strong>${rec.confidence_score}%</strong></div>
+                    <div style="margin-top: 12px; padding: 12px; background: var(--background-light); border-radius: 8px; border-left: 3px solid var(--accent-teal); font-size: 0.9rem;">
+                        <i class="fas fa-lightbulb" style="color: var(--accent-teal);"></i> ${rec.reason}
+                    </div>
+                    <button class="btn btn-primary btn-full-width" style="margin-top: 12px;"
+                        onclick="selectRecommendedDestination('${rec.name.replace(/'/g, "\\'")}')">
+                        <i class="fas fa-route"></i> Plan Trip Here
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function selectRecommendedDestination(destination) {
+            destinationInput.value = destination;
+            document.querySelector('.calculator-sidebar').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // ------- INIT -------
+        document.addEventListener('DOMContentLoaded', function () {
+            initMap();
+            const tripCount = parseInt('{{ trip_count|default(0) }}');
+            if (tripCount >= 10) {
+                loadRecommendations();
+            }
+        });
+
+        window.onclick = function (event) {
+            const modal = document.getElementById('detailsModal');
+            if (event.target === modal) closeModal();
+        };
+    </script>
+    <script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
+{% include 'components/footer.html' %}
+</body>
+
+</html>

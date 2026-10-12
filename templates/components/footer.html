@@ -1,0 +1,46 @@
+<footer class="footer site-footer">
+    <div class="footer-content">
+        <div class="footer-column footer-brand-column">
+            <a class="footer-logo" href="{{ url_for('landing') }}" aria-label="Ikhtiyar home">
+                <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
+            </a>
+            <p class="footer-tagline">Making sustainable transport accessible for everyone in the UAE. Compare costs, track emissions, and make smarter travel choices.</p>
+            <p class="footer-uae">Made by Ezzah Najmal, Ramzia Fathima, and Naureen Shamjad</p>
+        </div>
+
+        <div class="footer-column">
+            <h4>Quick links</h4>
+            <ul>
+                <li><a href="{{ url_for('landing') if not session.get('user_id') else url_for('index') }}">Home</a></li>
+                {% if session.get('user_id') %}
+                    <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                    <li><a href="{{ url_for('history') }}">Trip history</a></li>
+                    <li><a href="{{ url_for('settings') }}">Settings</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Sign in</a></li>
+                    <li><a href="{{ url_for('register') }}">Create an account</a></li>
+                {% endif %}
+            </ul>
+        </div>
+
+        <div class="footer-column">
+            <h4>Get in touch</h4>
+            <div class="contact-info">
+                <div class="contact-item"><span aria-hidden="true">✉</span><a href="mailto:hello@ikhtiyar.ae">hello@ikhtiyar.ae</a></div>
+                <div class="contact-item"><span aria-hidden="true">⌖</span><span>Dubai, UAE</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-bottom">
+        <div class="footer-bottom-content">
+            <div class="footer-bottom-section"><span>© 2026 Ikhtiyar. All rights reserved.</span></div>
+            <div class="footer-bottom-section"><span>Made for Digital Fest 25–26</span></div>
+            <div class="footer-bottom-section">
+                {% if session.get('user_id') %}<a href="{{ url_for('settings', tab='privacy') }}">Privacy settings</a>{% else %}<a href="{{ url_for('login') }}">Privacy settings</a>{% endif %}
+                <span class="footer-divider" aria-hidden="true">•</span>
+                <a href="mailto:hello@ikhtiyar.ae">Contact</a>
+            </div>
+        </div>
+    </div>
+</footer>

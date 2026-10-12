@@ -1,0 +1,373 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Route Calculator - Ikhtiyar</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <style>
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--cream);
+            border-top: 5px solid var(--primary-maroon);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .ai-banner {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: var(--radius-md);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ai-progress-track {
+            background: rgba(0, 0, 0, 0.1);
+            height: 4px;
+            width: 200px;
+            margin-top: 5px;
+            border-radius: 2px;
+        }
+
+        .ai-progress-fill {
+            height: 4px;
+            background: #856404;
+            border-radius: 2px;
+        }
+
+        .ai-recommendations-section {
+            margin: 30px 0;
+        }
+        
+        .ai-recommendations-section h3 {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .ai-recommendations-section h3 i {
+            color: var(--accent-gold);
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <div class="container">
+            <a href="/home" class="logo">اختيار </a>
+            <div class="nav-links">
+                <a href="/home" class="active">Calculator</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/history">History</a>
+                <a href="/settings">Settings</a>
+            </div>
+            <div class="nav-user-section">
+                <div class="nav-divider"></div>
+                <div class="nav-username">{{ username }}</div>
+                <a href="/logout" class="logout-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="margin-top: 30px;">
+
+        {% if trip_count < 10 %}
+        <div class="ai-banner">
+            <i class="fas fa-robot"></i>
+            <div>
+                <strong>AI learning in progress:</strong> {{ 10 - trip_count }} more trips needed to activate
+                personalized recommendations.
+                <div class="ai-progress-track">
+                    <div class="ai-progress-fill" data-progress="{{ (trip_count / 10 * 100)|round|int }}"></div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="ai-banner ai-banner-success">
+            <i class="fas fa-robot"></i>
+            <div>
+                <strong>AI Recommendations Ready!</strong> Personalized UAE trip suggestions based on your travel history.
+            </div>
+        </div>
+        
+        <div class="ai-recommendations-section">
+            <h3>
+                <i class="fas fa-magic"></i> AI Trip Recommendations
+            </h3>
+            <div id="recommendations-cards" class="results-grid"></div>
+        </div>
+        {% endif %}
+
+    <div class="calculator-layout">
+
+        <div class="calculator-sidebar">
+            <h3>Plan Your Trip</h3>
+
+            <div class="form-group">
+                <label>Origin</label>
+                <input id="origin" class="form-control" value="Dubai Mall">
+            </div>
+
+            <div class="form-group">
+                <label>Destination</label>
+                <input id="destination" class="form-control" value="Dubai Marina">
+            </div>
+
+            <button class="btn btn-primary btn-full-width" onclick="calculateRoute()">
+                <i class="fas fa-search"></i> Compare Options
+            </button>
+
+            <hr>
+
+            <div id="results-sidebar" class="results-sidebar">
+                <h4>Quick Comparison</h4>
+                <div id="quick-stats"></div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+
+    </div>
+
+    <div id="results-grid" class="results-grid"></div>
+
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    </div> <!-- Close container div -->
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        const map = L.map('map').setView([25.2048, 55.2708], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        let activeLayers = [];
+
+        function clearMap() {
+            activeLayers.forEach(l => map.removeLayer(l));
+            activeLayers = [];
+        }
+
+        async function calculateRoute() {
+            const origin = originInput.value.trim();
+            const destination = destinationInput.value.trim();
+
+            if (!origin || !destination) {
+                alert("Please enter both origin and destination");
+                return;
+            }
+
+            loading.style.display = 'flex';
+
+            try {
+                const res = await fetch('/calculate_route', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ origin, destination })
+                });
+
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+
+                renderResults(data);
+            } catch (err) {
+                alert(err.message || "Route calculation failed");
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function renderResults(data) {
+            clearMap();
+            resultsGrid.innerHTML = '';
+
+            const o = L.marker([data.origin.lat, data.origin.lon]).addTo(map);
+            const d = L.marker([data.destination.lat, data.destination.lon]).addTo(map);
+            activeLayers.push(o, d);
+
+            map.fitBounds(L.featureGroup([o, d]).getBounds().pad(0.2));
+
+            const sorted = [...data.results].sort(
+                (a, b) => (b.is_recommended === true) - (a.is_recommended === true)
+            );
+
+            const recommended = sorted.find(r => r.is_recommended);
+
+            sorted.forEach(res => {
+                const card = document.createElement('div');
+                card.className = `transport-card ${res.is_recommended ? 'recommended' : ''}`;
+
+                const icons = {
+                    driving: 'fa-car',
+                    taxi: 'fa-taxi',
+                    metro: 'fa-subway',
+                    bus: 'fa-bus',
+                    walking: 'fa-walking',
+                    cycling: 'fa-bicycle'
+                };
+
+                card.innerHTML = `
+            ${res.is_recommended ? '<div class="badge-gold">⭐ RECOMMENDED</div>' : ''}
+            <h3><i class="fas ${icons[res.mode]}"></i> ${res.mode.toUpperCase()}</h3>
+            <div class="stat-row"><span>Cost</span><strong>${res.cost} AED</strong></div>
+            <div class="stat-row"><span>Time</span><strong>${res.time} min</strong></div>
+            <div class="stat-row"><span>Distance</span><strong>${res.distance} km</strong></div>
+            <div class="stat-row"><span>CO₂</span><strong>${res.co2} kg</strong></div>
+            <button class="btn btn-primary btn-full-width"
+                onclick='recordTrip(${JSON.stringify(res)}, ${JSON.stringify(data.origin)}, ${JSON.stringify(data.destination)}, ${data.driving_co2_baseline})'>
+                SELECT THIS OPTION
+            </button>
+        `;
+
+                resultsGrid.appendChild(card);
+
+                if (res.is_recommended && res.geometry) {
+                    const poly = L.polyline(res.geometry, { color: '#5D1F1A', weight: 5 }).addTo(map);
+                    activeLayers.push(poly);
+                }
+            });
+
+            resultsSidebar.style.display = 'block';
+        }
+
+        async function recordTrip(res, origin, destination, baseline) {
+            if (!confirm(`Confirm ${res.mode.toUpperCase()} route?`)) return;
+
+            const payload = { ...res, origin, destination, driving_co2_baseline: baseline };
+
+            const response = await fetch('/record_trip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                alert(`Trip recorded! CO₂ saved: ${data.saved_co2} kg`);
+                window.location.href = '/dashboard';
+            }
+        }
+
+        const originInput = document.getElementById('origin');
+        const destinationInput = document.getElementById('destination');
+        const resultsGrid = document.getElementById('results-grid');
+        const resultsSidebar = document.getElementById('results-sidebar');
+        const loading = document.getElementById('loading');
+
+        // Load AI recommendations if user has enough trips
+        async function loadRecommendations() {
+            try {
+                const response = await fetch('/recommendations');
+                const data = await response.json();
+                
+                if (data.ai_ready && data.recommendations.length > 0) {
+                    renderRecommendations(data.recommendations);
+                }
+            } catch (err) {
+                console.error('Failed to load recommendations:', err);
+            }
+        }
+
+        function renderRecommendations(recommendations) {
+            const container = document.getElementById('recommendations-cards');
+            container.innerHTML = '';
+
+            recommendations.forEach(rec => {
+                const card = document.createElement('div');
+                card.className = 'transport-card';
+                card.style.borderLeft = '4px solid var(--accent-gold)';
+                
+                const categoryIcons = {
+                    'landmark': 'fa-monument',
+                    'shopping': 'fa-shopping-bag',
+                    'beach': 'fa-umbrella-beach',
+                    'cultural': 'fa-landmark',
+                    'entertainment': 'fa-theater-masks',
+                    'adventure': 'fa-mountain',
+                    'nature': 'fa-tree'
+                };
+
+                card.innerHTML = `
+                    <div class="badge-gold ai-recommendation-badge">
+                        <i class="fas fa-robot"></i> AI RECOMMENDATION
+                    </div>
+                    <h3><i class="fas ${categoryIcons[rec.category] || 'fa-map-marker-alt'}"></i> ${rec.name}</h3>
+                    <div class="stat-row"><span>City</span><strong>${rec.city}</strong></div>
+                    <div class="stat-row"><span>Category</span><strong>${rec.category.charAt(0).toUpperCase() + rec.category.slice(1)}</strong></div>
+                    <div class="stat-row"><span>Match Score</span><strong>${rec.confidence_score}%</strong></div>
+                    <div class="recommendation-reason">
+                        <i class="fas fa-lightbulb"></i> ${rec.reason}
+                    </div>
+                    <button class="btn btn-primary ai-recommendation-btn"
+                        onclick="selectRecommendedDestination('${rec.name}')">
+                        <i class="fas fa-route"></i> Plan Trip Here
+                    </button>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function selectRecommendedDestination(destination) {
+            destinationInput.value = destination;
+            // Scroll to the route calculator
+            document.querySelector('.calculator-sidebar').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Load recommendations on page load if user has enough trips
+        document.addEventListener('DOMContentLoaded', function() {
+            const tripCount = parseInt('{{ trip_count }}');
+            if (tripCount >= 10) {
+                loadRecommendations();
+            }
+            
+            // Set progress bar width
+            const progressFill = document.querySelector('.ai-progress-fill');
+            if (progressFill) {
+                const progress = progressFill.getAttribute('data-progress');
+                progressFill.style.width = progress + '%';
+            }
+        });
+    </script>
+
+    <script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
+</body>
+
+</html>
