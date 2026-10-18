@@ -3,6 +3,7 @@ import sqlite3
 import hashlib
 import hmac
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from config import Config
 import os
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -418,26 +419,29 @@ class DBManager:
     def add_trip(self, user_id, origin_name, origin_lat, origin_lon,
                  dest_name, dest_lat, dest_lon, transport, cost, time_min, co2, co2_saved, distance):
         conn, cursor = self.get_connection()
+        local_now = datetime.now(ZoneInfo('Asia/Dubai'))
 
         if USING_POSTGRES:
             cursor.execute('''
                 INSERT INTO trips (user_id, origin_name, origin_lat, origin_lon,
                                    destination_name, destination_lat, destination_lon,
-                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km,
+                                   trip_date, trip_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (user_id, origin_name, origin_lat, origin_lon, dest_name, dest_lat, dest_lon,
-                  transport, cost, time_min, co2, co2_saved, distance))
+                  transport, cost, time_min, co2, co2_saved, distance, local_now.date(), local_now.time().replace(tzinfo=None)))
         else:
             cursor.execute('''
                 INSERT INTO trips (user_id, origin_name, origin_lat, origin_lon,
                                    destination_name, destination_lat, destination_lon,
-                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km,
+                                   trip_date, trip_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (user_id, origin_name, origin_lat, origin_lon, dest_name, dest_lat, dest_lon,
-                  transport, cost, time_min, co2, co2_saved, distance))
+                  transport, cost, time_min, co2, co2_saved, distance, local_now.date().isoformat(), local_now.time().isoformat(timespec='seconds')))
 
         # Update monthly stats
-        current_month = datetime.now().strftime('%Y-%m')
+        current_month = local_now.strftime('%Y-%m')
 
         if USING_POSTGRES:
             cursor.execute('SELECT * FROM monthly_stats WHERE user_id = %s AND month = %s', (user_id, current_month))
@@ -511,7 +515,7 @@ class DBManager:
 
     def get_monthly_stats(self, user_id, month=None):
         if not month:
-            month = datetime.now().strftime('%Y-%m')
+            month = datetime.now(ZoneInfo('Asia/Dubai')).strftime('%Y-%m')
         conn, cursor = self.get_connection()
         if USING_POSTGRES:
             cursor.execute('SELECT * FROM monthly_stats WHERE user_id = %s AND month = %s', (user_id, month))

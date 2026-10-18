@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
 
     <style>
         :root {
@@ -373,6 +372,7 @@
         }
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/feature-enhancements.css') }}">
 </head>
 
 <body class="calculator-page">
@@ -437,11 +437,33 @@
                         <div class="form-group">
                             <label>Starting Point</label>
                             <input id="origin" class="form-control" placeholder="e.g., Dubai Mall" value="Dubai Mall">
+                            <div class="saved-place-tools">
+                                <select id="saved-origin-select" class="saved-place-select" aria-label="Choose a saved starting point"><option value="">Use a saved place as start</option></select>
+                                <button type="button" data-save-place="origin">Save as top destination</button>
+                            </div>
                         </div>
 
                         <div class="form-group">
                             <label>Destination</label>
                             <input id="destination" class="form-control" placeholder="e.g., Dubai Marina" value="Dubai Marina">
+                            <div class="saved-place-tools">
+                                <select id="saved-destination-select" class="saved-place-select" aria-label="Choose a saved destination"><option value="">Use a saved place as destination</option></select>
+                                <button type="button" data-save-place="destination">Save as top destination</button>
+                            </div>
+                        </div>
+
+                        <p class="location-privacy-note">On submit, locations are sent to the configured geocoder, weather, and routing providers. Public no-key search is for public landmarks only; its basic address filter is not a privacy guarantee. Do not submit private locations without a trusted LocationIQ key configured in Render.</p>
+
+                        <div class="route-goal-control">
+                            <label for="route-goal">What matters most for this trip?</label>
+                            <select id="route-goal" name="goal">
+                                <option value="balanced">My saved preferences</option>
+                                <option value="fastest">Fastest arrival</option>
+                                <option value="cheapest">Lowest estimated cost</option>
+                                <option value="eco">Lowest estimated emissions</option>
+                                <option value="shortest">Shortest distance</option>
+                            </select>
+                            <small class="goal-caption">All available options stay visible; the selected goal changes the recommendation ranking.</small>
                         </div>
 
                         <button class="btn btn-primary btn-full-width" onclick="calculateRoute()">
@@ -457,7 +479,16 @@
                     </div>
 
                     <div class="map-container">
-                        <div id="map"></div>
+                        <div class="map-toolbar">
+                            <button id="traffic-toggle" type="button" aria-pressed="false">Show traffic</button>
+                            <small id="traffic-status" role="status">Traffic overlay status</small>
+                            <div id="traffic-legend" class="traffic-legend" hidden aria-label="Traffic-flow legend">
+                                <span><i class="free"></i>Freer flow</span><span><i class="moderate"></i>Moderate</span><span><i class="slow"></i>Slow</span><span><i class="heavy"></i>Heavy</span>
+                            </div>
+                        </div>
+                        <div id="map" data-traffic-available="{{ 'true' if traffic_available else 'false' }}"></div>
+                        <div id="weather-advisory" class="weather-advisory" role="status" aria-live="polite"></div>
+                        <div id="route-estimate-note" class="estimate-banner" hidden></div>
                     </div>
                 </div>
 
@@ -517,16 +548,31 @@
         <div id="loading" class="loading-overlay">
             <div class="spinner"></div>
         </div>
+        <dialog id="save-place-dialog" class="save-place-dialog" aria-labelledby="save-place-title">
+            <form id="save-place-form">
+                <h2 id="save-place-title">Save a favourite place</h2>
+                <p>Save this <span id="save-place-target">destination</span> so you can reuse it as a start or end point.</p>
+                <label for="save-place-label">Your name for this place
+                    <input id="save-place-label" type="text" maxlength="40" placeholder="Home, work, office" required>
+                </label>
+                <input id="save-place-location" type="hidden">
+                <input id="save-place-latitude" type="hidden">
+                <input id="save-place-longitude" type="hidden">
+                <div class="dialog-actions">
+                    <button id="save-place-cancel" type="button">Cancel</button>
+                    <button type="submit">Save place</button>
+                </div>
+            </form>
+        </dialog>
+        <div id="feature-toast" class="feature-toast" role="status" aria-live="polite"></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
     <script>
         let map;
         let activeLayers = [];
         let lastData = null;
-        let routingControl = null;
 
         const originIcon = L.divIcon({
             html: '<div style="background: #1A4F4D; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid #2D8A85; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">A</div>',
@@ -542,6 +588,7 @@
 
         function initMap() {
             map = L.map('map').setView([25.2048, 55.2708], 11);
+            window.map = map;
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
@@ -550,10 +597,6 @@
         function clearMap() {
             activeLayers.forEach(layer => map.removeLayer(layer));
             activeLayers = [];
-            if (routingControl) {
-                map.removeControl(routingControl);
-                routingControl = null;
-            }
         }
 
         const originInput = document.getElementById('origin');
@@ -574,10 +617,24 @@
             loading.style.display = 'flex';
 
             try {
+                const routeRequest = {
+                    origin,
+                    destination,
+                    goal: document.getElementById('route-goal')?.value || 'balanced'
+                };
+                [[originInput, 'origin'], [destinationInput, 'destination']].forEach(([input, prefix]) => {
+                    const lat = Number(input.dataset.lat);
+                    const lon = Number(input.dataset.lon);
+                    if (input.dataset.lat && input.dataset.lon && Number.isFinite(lat) && Number.isFinite(lon)) {
+                        routeRequest[`${prefix}_lat`] = lat;
+                        routeRequest[`${prefix}_lon`] = lon;
+                        routeRequest[`${prefix}_saved_id`] = input.dataset.savedId;
+                    }
+                });
                 const res = await fetch('/calculate_route', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ origin, destination })
+                    body: JSON.stringify(routeRequest)
                 });
 
                 const data = await res.json();
@@ -596,24 +653,17 @@
             clearMap();
             resultsGrid.innerHTML = '';
             lastData = data;
+            window.IkhtiyarLastRoute = data;
+            window.dispatchEvent(new CustomEvent('ikhtiyar:route-results', { detail: data }));
 
             // Place origin and destination markers
             const originMarker = L.marker([data.origin.lat, data.origin.lon], { icon: originIcon }).addTo(map);
             const destinationMarker = L.marker([data.destination.lat, data.destination.lon], { icon: destinationIcon }).addTo(map);
             activeLayers.push(originMarker, destinationMarker);
 
-            // --- PROPER ROUTE USING LEAFLET ROUTING MACHINE ---
-            // Get driving geometry from backend as the primary visual route
+            // Draw only provider-supplied route geometry; never send endpoints to a browser-side demo router.
             const drivingRoute = data.results.find(r => r.mode === 'driving');
-            const drivingWaypoints = [
-                L.latLng(data.origin.lat, data.origin.lon),
-                L.latLng(data.destination.lat, data.destination.lon)
-            ];
-
-            // If driving geometry has many points, use them as waypoints for a smooth route
-            const waypoints = [];
             if (drivingRoute && drivingRoute.geometry && drivingRoute.geometry.length > 2) {
-                // Use backend-provided geometry directly as a polyline (most accurate)
                 const drivingPolyline = L.polyline(drivingRoute.geometry, {
                     color: '#1A4F4D',
                     weight: 6,
@@ -627,21 +677,6 @@
                 // Ensure glow is under the main polyline
                 drivingGlow.bringToBack();
                 activeLayers.push(drivingPolyline, drivingGlow);
-            } else {
-                // Fallback: use routing machine to snap to roads
-                routingControl = L.Routing.control({
-                    waypoints: drivingWaypoints,
-                    routeWhileDragging: false,
-                    show: false,
-                    addWaypoints: false,
-                    createMarker: () => null,
-                    lineOptions: {
-                        styles: [
-                            { color: '#1A4F4D', opacity: 0.9, weight: 6 },
-                            { color: '#2D8A85', opacity: 0.3, weight: 10 }
-                        ]
-                    }
-                }).addTo(map);
             }
 
             map.fitBounds(L.featureGroup([originMarker, destinationMarker]).getBounds().pad(0.25));
@@ -663,7 +698,7 @@
                 const selectBtn = document.createElement('button');
                 selectBtn.className = 'btn btn-primary';
                 selectBtn.innerHTML = '<i class="fas fa-check"></i> SELECT';
-                selectBtn.onclick = () => selectTransport(res, data.origin, data.destination, data.driving_co2_baseline);
+                selectBtn.onclick = () => selectTransport(res);
 
                 const detailsBtn = document.createElement('button');
                 detailsBtn.className = 'btn btn-secondary';
@@ -676,8 +711,9 @@
                 buttonContainer.appendChild(detailsBtn);
 
                 card.innerHTML = `
-                    ${res.is_recommended ? '<div class="badge-gold">⭐ RECOMMENDED</div>' : ''}
+                    ${res.is_recommended ? `<div class="badge-gold">RECOMMENDED · ${data.goal_label || 'YOUR PREFERENCES'}</div>` : ''}
                     <h3><i class="fas ${icons[res.mode] || 'fa-route'}"></i> ${res.mode.toUpperCase()}</h3>
+                    ${res.note ? `<small class="transport-note">${res.note}</small>` : ''}
                     <div class="stat-row"><span>Cost</span><strong>${res.cost} AED</strong></div>
                     <div class="stat-row"><span>Time</span><strong>${res.time} min</strong></div>
                     <div class="stat-row"><span>Distance</span><strong>${res.distance} km</strong></div>
@@ -719,10 +755,10 @@
             return icons[mode] || 'fa-route';
         }
 
-        async function selectTransport(res, origin, destination, baseline) {
+        async function selectTransport(res) {
             if (!confirm(`Confirm ${res.mode.toUpperCase()} route?`)) return;
 
-            const payload = { ...res, origin, destination, driving_co2_baseline: baseline };
+            const payload = { quote_token: res.quote_token, mode: res.mode };
 
             try {
                 const response = await fetch('/record_trip', {
@@ -733,13 +769,14 @@
 
                 const data = await response.json();
                 if (data.success) {
+                    if (data.gamification) window.dispatchEvent(new CustomEvent('ikhtiyar:reward', { detail: data.gamification }));
                     if (data.saved_to_history === false) {
-                        alert('Route compared. This selection was not saved to your history, according to your privacy setting.');
-                        window.location.href = '/home';
+                        window.IkhtiyarFeatures?.showToast('Route compared. It was not saved to your history, according to your privacy setting.');
+                        window.setTimeout(() => { window.location.href = '/home'; }, 1800);
                         return;
                     }
-                    alert(`Trip recorded. Estimated CO₂ saved: ${data.saved_co2} kg`);
-                    window.location.href = '/dashboard';
+                    if (!data.gamification) window.IkhtiyarFeatures?.showToast(`Trip recorded. Estimated CO₂ saved: ${data.saved_co2} kg.`);
+                    window.setTimeout(() => { window.location.href = '/dashboard'; }, 2200);
                 } else {
                     alert('Failed to record trip. Please try again.');
                 }
@@ -759,8 +796,7 @@
 
             document.getElementById('modalSelectBtn').onclick = () => {
                 closeModal();
-                const baseline = lastData ? lastData.driving_co2_baseline : 0;
-                selectTransport(transport, origin, destination, baseline);
+                selectTransport(transport);
             };
 
             document.getElementById('detailsModal').style.display = 'flex';
@@ -890,6 +926,7 @@
         };
     </script>
     <script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/calculator-features.js') }}" defer></script>
 {% include 'components/footer.html' %}
 </body>
 

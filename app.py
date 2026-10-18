@@ -1,25 +1,33 @@
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
-from datetime import datetime
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response, Response
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from datetime import datetime, timedelta
 import csv
 import io
 import math
 import re
+from uuid import uuid4
 from config import Config
 from database.db_manager import DBManager
+from database.feature_store import FeatureStore
 from services.geocoding_service import GeocodingService
 from services.route_service import RouteService
 from services.cost_calculator import CostCalculator
 from services.co2_calculator import CO2Calculator
 from services.weather_service import WeatherService
+from services.transit_availability import check_metro_availability
+from services.traffic_service import TrafficService
+from services.gamification import build_weekly_challenges, current_week_start, level_from_points, uae_today
 from ml.predictor import TransportPredictor
 from ml.trip_recommender import TripRecommender
 import os
 
 app = Flask(__name__)
 app.config.from_object(Config)
+trip_quote_serializer = URLSafeTimedSerializer(app.secret_key)
 
 db = DBManager()
+feature_store = FeatureStore(db)
 
 @app.route('/')
 def landing():
@@ -69,7 +77,71 @@ def index():
     history = db.get_history(session['user_id'])
     trip_count = len(history)
     
-    return render_template('index.html', username=session['username'], trip_count=trip_count)
+    return render_template(
+        'index.html', username=session['username'], trip_count=trip_count,
+        traffic_available=bool(Config.TOMTOM_KEY)
+    )
+
+@app.route('/api/saved-destinations', methods=['GET', 'POST'])
+def saved_destinations_api():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if request.method == 'GET':
+        destinations = feature_store.get_saved_destinations(session['user_id'])
+        return jsonify({'destinations': [
+            {'destination_id': item['destination_id'], 'label': item['label'], 'place_name': item['place_name'],
+             'latitude': item.get('latitude'), 'longitude': item.get('longitude')}
+            for item in destinations
+        ]})
+
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A saved place name and label are required.'}), 400
+    label = str(data.get('label', '')).strip()
+    place_name = str(data.get('place_name', '')).strip()
+    if not 2 <= len(label) <= 40:
+        return jsonify({'error': 'The saved-place label must be 2–40 characters.'}), 400
+    if not 2 <= len(place_name) <= 140:
+        return jsonify({'error': 'The place name must be 2–140 characters.'}), 400
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    if (latitude is None) != (longitude is None):
+        return jsonify({'error': 'Saved-place coordinates must include both latitude and longitude.'}), 400
+    if latitude is not None:
+        try:
+            latitude, longitude = float(latitude), float(longitude)
+            if not (math.isfinite(latitude) and math.isfinite(longitude)
+                    and -90 <= latitude <= 90 and -180 <= longitude <= 180):
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Saved-place coordinates are invalid.'}), 400
+    success, result = feature_store.add_saved_destination(
+        session['user_id'], label, place_name, latitude, longitude
+    )
+    if not success:
+        return jsonify({'error': result}), 409
+    return jsonify({'success': True, 'destination': result}), 201
+
+@app.route('/api/saved-destinations/<int:destination_id>', methods=['DELETE'])
+def delete_saved_destination_api(destination_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    deleted = feature_store.delete_saved_destination(session['user_id'], destination_id)
+    if not deleted:
+        return jsonify({'error': 'Saved place not found.'}), 404
+    return jsonify({'success': True})
+
+@app.route('/api/traffic/<int:zoom>/<int:x>/<int:y>.png')
+def traffic_tile(zoom, x, y):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    image, error, status = TrafficService.get_tile(zoom, x, y)
+    if status != 200:
+        return jsonify({'error': error}), status
+    response = Response(image, mimetype='image/png')
+    response.headers['Cache-Control'] = 'private, max-age=60'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 @app.route('/recommendations')
 def recommendations():
@@ -108,199 +180,353 @@ def recommendations():
 
 @app.route('/calculate_route', methods=['POST'])
 def calculate_route():
-    if 'user_id' not in session: 
+    if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-    
+
     try:
-        data = request.json
-        origin_name = data.get('origin')
-        dest_name = data.get('destination')
-        
+        data = request.get_json(silent=True) or {}
+        origin_name = str(data.get('origin', '')).strip()
+        dest_name = str(data.get('destination', '')).strip()
+        goal = str(data.get('goal', 'balanced')).lower()
         if not origin_name or not dest_name:
             return jsonify({'error': 'Origin and destination are required'}), 400
-        
-        print(f"Route request: {origin_name} -> {dest_name}")
-        
-        # 1. Geocode
-        try:
-            o_lat, o_lon, o_display = GeocodingService.get_coordinates(origin_name)
-            d_lat, d_lon, d_display = GeocodingService.get_coordinates(dest_name)
-        except Exception as e:
-            print(f"Geocoding failed: {e}")
-            return jsonify({'error': f'Geocoding failed: {str(e)}'}), 400
+        if len(origin_name) > 140 or len(dest_name) > 140:
+            return jsonify({'error': 'Place names must be 140 characters or less.'}), 400
+        if goal not in {'balanced', 'fastest', 'cheapest', 'eco', 'shortest'}:
+            goal = 'balanced'
 
-        # 2. Routes (Driving used as baseline dist usually, or specific route for each)
+        try:
+            def resolve_place(name, prefix):
+                raw_lat, raw_lon = data.get(f'{prefix}_lat'), data.get(f'{prefix}_lon')
+                saved_id = data.get(f'{prefix}_saved_id')
+                if raw_lat is None and raw_lon is None and saved_id is None:
+                    return GeocodingService.get_coordinates(name)
+                if raw_lat is None or raw_lon is None or saved_id is None:
+                    raise ValueError('Choose a saved place to reuse its stored coordinates.')
+                lat, lon = float(raw_lat), float(raw_lon)
+                if not (math.isfinite(lat) and math.isfinite(lon)
+                        and -90 <= lat <= 90 and -180 <= lon <= 180):
+                    raise ValueError('Saved coordinates are outside valid latitude/longitude ranges.')
+                try:
+                    saved_id = int(saved_id)
+                except (TypeError, ValueError):
+                    raise ValueError('The selected saved place is invalid.')
+                saved_place = feature_store.get_saved_destination(session['user_id'], saved_id)
+                if not saved_place or saved_place.get('latitude') is None or saved_place.get('longitude') is None:
+                    raise ValueError('The selected saved place could not be verified.')
+                if abs(float(saved_place['latitude']) - lat) > 1e-6 or abs(float(saved_place['longitude']) - lon) > 1e-6:
+                    raise ValueError('The selected saved place coordinates do not match your saved record.')
+                return lat, lon, name
+
+            o_lat, o_lon, o_display = resolve_place(origin_name, 'origin')
+            d_lat, d_lon, d_display = resolve_place(dest_name, 'destination')
+        except Exception as error:
+            print(f"Geocoding failed ({type(error).__name__}).")
+            return jsonify({'error': f'Geocoding failed: {str(error)}'}), 400
+
         try:
             routes = RouteService.get_route(o_lat, o_lon, d_lat, d_lon)
-            print(f"Route service returned: {routes}")
-        except Exception as e:
-            print(f"Route calculation failed: {e}")
-            return jsonify({'error': f'Route calculation failed: {str(e)}'}), 500
-        
-        # 3. Weather
-        try:
-            weather = WeatherService.get_weather(o_lat, o_lon)
-            temp = weather['temp']
-        except Exception as e:
-            print(f"Weather service failed: {e}")
-            temp = 25  # Default temperature
-        
-        # 4. Predict
-        predictor = TransportPredictor(session['user_id'])
-        recommended_mode = predictor.predict(routes['driving']['distance_km'], datetime.now(), temp)
-        
-        # 5. Build Results
-        results = []
-        modes = ['driving', 'taxi', 'metro', 'bus', 'walking', 'cycling']
-        
-        # Base distances
-        dist_driving = routes['driving']['distance_km']
-        dist_walking = routes['walking']['distance_km']
-        dist_cycling = routes['cycling']['distance_km']
-        
-        # Custom Route Logic for Metro/Bus (Estimation)
-        straight_dist = RouteService.haversine(o_lat, o_lon, d_lat, d_lon)
-        
-        driving_co2 = CO2Calculator.calculate_emissions('driving', dist_driving)
-        
-        for mode in modes:
-            res = {}
-            res['mode'] = mode
-            res['is_recommended'] = (mode == recommended_mode)
-            
-            if mode == 'driving':
-                res['distance'] = dist_driving
-                res['time'] = routes['driving']['duration_min']
-                res['cost'] = CostCalculator.calculate_driving_cost(dist_driving, routes['driving']['geometry'])
-                res['geometry'] = routes['driving']['geometry']
-                
-            elif mode == 'taxi':
-                res['distance'] = dist_driving
-                res['time'] = routes['driving']['duration_min']
-                res['cost'] = CostCalculator.calculate_taxi_cost(dist_driving)
-                res['geometry'] = routes['driving']['geometry']
-                 
-            elif mode == 'metro':
-                est_dist = straight_dist * 1.15
-                est_time = (est_dist / 40) * 60 + 20
-                res['distance'] = round(est_dist, 2)
-                res['time'] = round(est_time, 0)
-                res['cost'] = CostCalculator.calculate_metro_cost(est_dist)
-                res['geometry'] = [[o_lat, o_lon], [d_lat, d_lon]]
-                
-            elif mode == 'bus':
-                est_dist = straight_dist * 1.3
-                est_time = (est_dist / 25) * 60
-                res['distance'] = round(est_dist, 2)
-                res['time'] = round(est_time, 0)
-                res['cost'] = CostCalculator.calculate_bus_cost(est_dist)
-                res['geometry'] = [[o_lat, o_lon], [d_lat, d_lon]]
-                
-            elif mode == 'walking':
-                res['distance'] = dist_walking
-                res['time'] = routes['walking']['duration_min']
-                res['cost'] = 0
-                res['geometry'] = routes['walking']['geometry']
-                 
-            elif mode == 'cycling':
-                res['distance'] = dist_cycling
-                res['time'] = routes['cycling']['duration_min']
-                res['cost'] = 0
-                res['geometry'] = routes['cycling']['geometry']
+        except Exception as error:
+            print(f"Route calculation failed ({type(error).__name__}).")
+            return jsonify({'error': 'Route calculation failed. Please try again.'}), 500
 
-            res['co2'] = CO2Calculator.calculate_emissions(mode, res['distance'])
-            res['calories'] = CO2Calculator.calculate_calories(mode, res['distance'])
-            
-            results.append(res)
-
-        # Rank routes by the member's saved speed/cost/environment priorities.
         prefs = db.get_preferences(session['user_id']) or {}
-        raw_weights = [
+        max_walk_temp = float(prefs.get('max_walking_temp', 40) or 40)
+        try:
+            weather = WeatherService.get_weather(d_lat, d_lon, max_walk_temp)
+        except Exception as error:
+            print(f"Weather service failed ({type(error).__name__}).")
+            weather = {'is_live': False, 'temp': None, 'apparent_temp': None,
+                       'advisories': [], 'description': 'Live weather unavailable'}
+        apparent_temp = weather.get('apparent_temp') if weather.get('is_live') else None
+
+        metro_info = check_metro_availability(o_lat, o_lon, d_lat, d_lon)
+        straight_dist = RouteService.haversine(o_lat, o_lon, d_lat, d_lon)
+        driving = routes['driving']
+        walking = routes['walking']
+        cycling = routes['cycling']
+        dist_driving = float(driving['distance_km'])
+
+        try:
+            predictor = TransportPredictor(session['user_id'])
+            recommended_mode = predictor.predict(
+                dist_driving, datetime.now(), apparent_temp if apparent_temp is not None else 40
+            )
+        except Exception as error:
+            print(f"Transport predictor unavailable: {error}")
+            recommended_mode = 'driving'
+
+        goal_labels = {
+            'balanced': 'YOUR PREFERENCES',
+            'fastest': 'FASTEST ARRIVAL',
+            'cheapest': 'LOWEST ESTIMATED COST',
+            'eco': 'LOWEST ESTIMATED EMISSIONS',
+            'shortest': 'SHORTEST DISTANCE',
+        }
+        modes = ['driving', 'taxi', 'bus', 'walking', 'cycling']
+        if metro_info.get('available'):
+            modes.insert(2, 'metro')
+
+        driving_co2 = CO2Calculator.calculate_emissions('driving', dist_driving)
+        results = []
+        for mode in modes:
+            result = {'mode': mode, 'geometry': [], 'is_estimate': False, 'note': ''}
+            if mode == 'driving':
+                road_geometry = driving.get('geometry', [])
+                route_is_estimate = bool(driving.get('is_estimate', True))
+                result.update({
+                    'distance': dist_driving,
+                    'time': driving['duration_min'],
+                    'cost': CostCalculator.calculate_driving_cost(dist_driving, road_geometry),
+                    'geometry': [] if route_is_estimate else road_geometry,
+                    'is_estimate': route_is_estimate,
+                })
+                if result['is_estimate']:
+                    result['note'] = 'Road distance and time are estimates; no live driving route is available.'
+            elif mode == 'taxi':
+                route_is_estimate = bool(driving.get('is_estimate', True))
+                result.update({
+                    'distance': dist_driving,
+                    'time': driving['duration_min'],
+                    'cost': CostCalculator.calculate_taxi_cost(dist_driving),
+                    'geometry': [] if route_is_estimate else driving.get('geometry', []),
+                    'is_estimate': route_is_estimate,
+                })
+                result['note'] = 'Taxi fare is estimated and is not a live ride quote.'
+            elif mode == 'metro':
+                metro_distance = straight_dist * 1.15
+                result.update({
+                    'distance': round(metro_distance, 2),
+                    'time': round((metro_distance / 40) * 60 + 20, 0),
+                    'cost': CostCalculator.calculate_metro_cost(metro_distance),
+                    'geometry': [],
+                    'is_estimate': True,
+                    'note': 'Estimated Metro option: both ends are near active stations; fare and time are not live transit data.',
+                })
+            elif mode == 'bus':
+                bus_distance = straight_dist * 1.3
+                result.update({
+                    'distance': round(bus_distance, 2),
+                    'time': round((bus_distance / 25) * 60, 0),
+                    'cost': CostCalculator.calculate_bus_cost(bus_distance),
+                    'geometry': [],
+                    'is_estimate': True,
+                    'note': 'Estimated bus fare and time; no live bus route or schedule is available.',
+                })
+            elif mode == 'walking':
+                result.update({
+                    'distance': walking['distance_km'],
+                    'time': walking['duration_min'],
+                    'cost': 0,
+                    'geometry': [] if walking.get('is_estimate', True) else walking.get('geometry', []),
+                    'is_estimate': bool(walking.get('is_estimate', True)),
+                })
+                if result['is_estimate']:
+                    result['note'] = 'Walking distance and time use a straight-line estimate.'
+            elif mode == 'cycling':
+                result.update({
+                    'distance': cycling['distance_km'],
+                    'time': cycling['duration_min'],
+                    'cost': 0,
+                    'geometry': [] if cycling.get('is_estimate', True) else cycling.get('geometry', []),
+                    'is_estimate': bool(cycling.get('is_estimate', True)),
+                })
+                if result['is_estimate']:
+                    result['note'] = 'Cycling distance and time use a straight-line estimate.'
+
+            result['co2'] = CO2Calculator.calculate_emissions(mode, result['distance'])
+            result['calories'] = CO2Calculator.calculate_calories(mode, result['distance'])
+            results.append(result)
+
+        raw_preferences = [
             max(1, min(10, int(prefs.get('priority_speed', 5)))),
             max(1, min(10, int(prefs.get('priority_cost', 5)))),
-            max(1, min(10, int(prefs.get('priority_environment', 5))))
+            max(1, min(10, int(prefs.get('priority_environment', 5)))),
         ]
-        weight_total = sum(raw_weights) or 1
-        weights = [value / weight_total for value in raw_weights]
-        metrics = {
-            'time': [float(item.get('time', 0) or 0) for item in results],
-            'cost': [float(item.get('cost', 0) or 0) for item in results],
-            'co2': [float(item.get('co2', 0) or 0) for item in results]
-        }
+        if goal == 'balanced':
+            weight_sum = sum(raw_preferences) or 1
+            weights = [value / weight_sum for value in raw_preferences]
+        else:
+            weights = {
+                'fastest': (0.92, 0.04, 0.04),
+                'cheapest': (0.04, 0.92, 0.04),
+                'eco': (0.04, 0.04, 0.92),
+            }.get(goal, (0.03, 0.03, 0.03))
+
         def utility(value, values):
             low, high = min(values), max(values)
             return 1.0 if high == low else (high - value) / (high - low)
+
+        score_metrics = {
+            'time': [float(item['time'] or 0) for item in results],
+            'cost': [float(item['cost'] or 0) for item in results],
+            'co2': [float(item['co2'] or 0) for item in results],
+            'distance': [float(item['distance'] or 0) for item in results],
+        }
         budget = float(prefs.get('budget_per_trip', 50) or 0)
-        max_walk_temp = float(prefs.get('max_walking_temp', 40) or 40)
         for index, item in enumerate(results):
-            score = (
-                weights[0] * utility(metrics['time'][index], metrics['time']) +
-                weights[1] * utility(metrics['cost'][index], metrics['cost']) +
-                weights[2] * utility(metrics['co2'][index], metrics['co2'])
+            if goal == 'shortest':
+                score = (
+                    0.91 * utility(score_metrics['distance'][index], score_metrics['distance'])
+                    + 0.03 * utility(score_metrics['time'][index], score_metrics['time'])
+                    + 0.03 * utility(score_metrics['cost'][index], score_metrics['cost'])
+                    + 0.03 * utility(score_metrics['co2'][index], score_metrics['co2'])
+                )
+            else:
+                score = (
+                    weights[0] * utility(score_metrics['time'][index], score_metrics['time'])
+                    + weights[1] * utility(score_metrics['cost'][index], score_metrics['cost'])
+                    + weights[2] * utility(score_metrics['co2'][index], score_metrics['co2'])
+                )
+            if budget > 0 and float(item['cost'] or 0) > budget:
+                score *= 0.85
+            if apparent_temp is not None and apparent_temp >= max_walk_temp and item['mode'] in ('walking', 'cycling'):
+                score *= 0.65
+            if goal == 'balanced' and item['mode'] == recommended_mode:
+                score += 0.02
+            item['_rank_score'] = score
+
+        results.sort(key=lambda item: item['_rank_score'], reverse=True)
+        route_quote_id = uuid4().hex
+        for rank, item in enumerate(results, start=1):
+            item['rank'] = rank
+            item['is_recommended'] = rank == 1
+            item.pop('_rank_score', None)
+            item['quote_token'] = trip_quote_serializer.dumps({
+                'user_id': int(session['user_id']),
+                'quote_id': route_quote_id,
+                'origin': {'name': o_display, 'lat': o_lat, 'lon': o_lon},
+                'destination': {'name': d_display, 'lat': d_lat, 'lon': d_lon},
+                'mode': item['mode'],
+                'cost': float(item['cost']),
+                'time': float(item['time']),
+                'distance': float(item['distance']),
+                'co2': float(item['co2']),
+                'driving_co2_baseline': float(driving_co2),
+            }, salt='ikhtiyar-route-quote')
+
+        if routes.get('is_estimate', True):
+            route_estimate_note = (
+                f"Road source: {routes.get('provider', 'built-in estimate')}. One or more distance or time values are estimates; "
+                "add valid routing keys to Render for provider-based routes. "
             )
-            if budget > 0 and float(item.get('cost', 0) or 0) > budget:
-                score *= 0.75
-            if temp is not None and float(temp) > max_walk_temp and item.get('mode') in ('walking', 'cycling'):
-                score *= 0.75
-            if item.get('mode') == recommended_mode:
-                score += 0.04
-            item['_preference_score'] = score
-        best_mode = max(results, key=lambda item: item['_preference_score'])['mode'] if results else recommended_mode
-        for item in results:
-            item['is_recommended'] = item.get('mode') == best_mode
-            item.pop('_preference_score', None)
+        else:
+            route_estimate_note = f"Road source: {routes.get('provider', 'routing provider')}. Public-transit fares and times remain estimates. "
+        route_estimate_note += (
+            f"Metro check: {metro_info.get('reason', 'station coverage could not be confirmed')} "
+            "Metro coverage uses mapped Dubai stations, not a live itinerary or timetable."
+        )
 
         return jsonify({
             'origin': {'name': o_display, 'lat': o_lat, 'lon': o_lon},
             'destination': {'name': d_display, 'lat': d_lat, 'lon': d_lon},
+            'requested_origin_name': origin_name,
+            'requested_destination_name': dest_name,
             'results': results,
-            'driving_co2_baseline': driving_co2
+            'driving_co2_baseline': driving_co2,
+            'goal': goal,
+            'goal_label': goal_labels[goal],
+            'weather': weather,
+            'metro_availability': metro_info,
+            'route_provider': routes.get('provider', 'built-in estimate'),
+            'route_is_estimate': routes.get('is_estimate', True),
+            'route_estimate_note': route_estimate_note,
         })
-        
-    except Exception as e:
-        print(f"Unexpected error in calculate_route: {e}")
-        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+    except Exception as error:
+        print(f"Unexpected route calculation error ({type(error).__name__}).")
+        return jsonify({'error': 'Route calculation failed unexpectedly. Please try again.'}), 500
 
 @app.route('/record_trip', methods=['POST'])
 def record_trip():
-    if 'user_id' not in session: 
+    if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-    data = request.json
-    
-    # Calculate savings. Respect the member's choice not to retain new trip records.
-    driving_co2 = data.get('driving_co2_baseline', 0)
-    chosen_co2 = data.get('co2')
-    saved = max(0, driving_co2 - chosen_co2)
-    privacy = db.get_privacy_settings(session['user_id'])
-    if not privacy.get('save_trip_history', True):
-        return jsonify({'success': True, 'saved_co2': saved, 'saved_to_history': False})
-    
-    db.add_trip(
-        session['user_id'],
-        data['origin']['name'], data['origin']['lat'], data['origin']['lon'],
-        data['destination']['name'], data['destination']['lat'], data['destination']['lon'],
-        data['mode'],
-        data['cost'],
-        data['time'],
-        chosen_co2,
-        saved,
-        data['distance']
-    )
-    
-    # Check for retraining
-    hist = db.get_history(session['user_id'])
-    if len(hist) % 10 == 0:
+    data = request.get_json(silent=True) or {}
+    try:
+        token = data.get('quote_token')
+        if not isinstance(token, str) or not token:
+            return jsonify({'error': 'Recalculate the route before selecting a transport option.'}), 400
         try:
-            pred = TransportPredictor(session['user_id'])
-            pred.train_model()
-            
-            if len(hist) == 10:
-                rec = TripRecommender(session['user_id'])
-                rec.train_model()
-        except Exception as e:
-            print(f"Model training error: {e}")
-        
-    return jsonify({'success': True, 'saved_co2': saved, 'saved_to_history': True})
+            quote = trip_quote_serializer.loads(
+                token, salt='ikhtiyar-route-quote', max_age=1800
+            )
+        except SignatureExpired:
+            return jsonify({'error': 'This route selection expired. Please calculate the route again.'}), 400
+        except BadSignature:
+            return jsonify({'error': 'This route selection could not be verified. Please calculate again.'}), 400
+
+        user_id = int(session['user_id'])
+        if quote.get('user_id') != user_id:
+            return jsonify({'error': 'This route selection belongs to a different account.'}), 403
+        mode = str(quote.get('mode', '')).lower()
+        if data.get('mode') and str(data['mode']).lower() != mode:
+            return jsonify({'error': 'The selected transport does not match the route quote.'}), 400
+        allowed_modes = {'driving', 'taxi', 'metro', 'bus', 'walking', 'cycling'}
+        if mode not in allowed_modes:
+            return jsonify({'error': 'Choose a valid transport option.'}), 400
+
+        origin = quote.get('origin') or {}
+        destination = quote.get('destination') or {}
+        required = (origin.get('name'), origin.get('lat'), origin.get('lon'),
+                    destination.get('name'), destination.get('lat'), destination.get('lon'))
+        if not all(value is not None for value in required):
+            return jsonify({'error': 'The route quote is incomplete. Please calculate the route again.'}), 400
+        driving_co2 = float(quote['driving_co2_baseline'])
+        chosen_co2 = float(quote['co2'])
+        cost, duration, distance = float(quote['cost']), float(quote['time']), float(quote['distance'])
+        if not all(math.isfinite(value) and value >= 0 for value in (driving_co2, chosen_co2, cost, duration, distance)):
+            return jsonify({'error': 'The route quote contains invalid values. Please calculate again.'}), 400
+        saved = max(0, driving_co2 - chosen_co2)
+
+        privacy = db.get_privacy_settings(user_id)
+        if not privacy.get('save_trip_history', True):
+            return jsonify({'success': True, 'saved_co2': saved, 'saved_to_history': False})
+        if not feature_store.claim_trip_quote(user_id, quote.get('quote_id')):
+            return jsonify({'error': 'A transport option for this route was already recorded. Calculate a new route to continue.'}), 409
+        db.add_trip(
+            user_id, origin['name'], origin['lat'], origin['lon'],
+            destination['name'], destination['lat'], destination['lon'], mode,
+            cost, duration, chosen_co2, saved, distance
+        )
+
+        trip_day = uae_today()
+        reward = feature_store.award_trip_points(
+            user_id, trip_day, mode, saved
+        )
+        history = db.get_history(user_id)
+        challenges = build_weekly_challenges(history, trip_day)
+        challenge_rewards = []
+        week_start = current_week_start(trip_day).isoformat()
+        for challenge in challenges:
+            if challenge['is_complete'] and feature_store.award_weekly_challenge(
+                user_id, week_start, challenge['key'], challenge['reward_xp']
+            ):
+                challenge_rewards.append({
+                    'key': challenge['key'],
+                    'title': challenge['title'],
+                    'points_awarded': challenge['reward_xp'],
+                })
+        reward['challenge_rewards'] = challenge_rewards
+        reward['total_points'] = feature_store.get_gamification(user_id)['total_points']
+
+        if len(history) % 10 == 0:
+            try:
+                predictor = TransportPredictor(user_id)
+                predictor.train_model()
+                if len(history) == 10:
+                    TripRecommender(user_id).train_model()
+            except Exception as error:
+                print(f"Model training error: {error}")
+
+        return jsonify({
+            'success': True, 'saved_co2': saved, 'saved_to_history': True,
+            'gamification': reward,
+        })
+    except (TypeError, ValueError, KeyError) as error:
+        print(f"record_trip validation error ({type(error).__name__}).")
+        return jsonify({'error': 'Trip details are invalid. Please calculate the route again.'}), 400
+    except Exception as error:
+        print(f"record_trip failed ({type(error).__name__}).")
+        return jsonify({'error': 'The trip could not be saved right now.'}), 500
 
 @app.route('/dashboard')
 def dashboard():
@@ -318,6 +544,26 @@ def dashboard():
     # Recent trips
     history = db.get_history(session['user_id'])
     recent = history[:5]
+    today = uae_today()
+    week_start = current_week_start(today).isoformat()
+    weekly_challenges = build_weekly_challenges(history, today)
+    for challenge in weekly_challenges:
+        if challenge['is_complete']:
+            feature_store.award_weekly_challenge(
+                session['user_id'], week_start, challenge['key'], challenge['reward_xp']
+            )
+        challenge['rewarded'] = bool(challenge['is_complete'])
+    progress = feature_store.get_gamification(session['user_id'])
+    last_trip_date = str(progress.get('last_trip_date') or '')[:10]
+    current_streak = int(progress.get('current_streak') or 0)
+    if last_trip_date not in {today.isoformat(), (today - timedelta(days=1)).isoformat()}:
+        current_streak = 0
+    gamification = level_from_points(progress.get('total_points', 0))
+    gamification.update({
+        'current_streak': current_streak,
+        'best_streak': int(progress.get('best_streak') or 0),
+        'last_trip_date': last_trip_date or None,
+    })
     # psycopg2 returns DATE/TIME columns as Python objects. Flask's JSON
     # serializer cannot encode datetime.time values in the dashboard's tojson block.
     for trip in recent:
@@ -326,7 +572,10 @@ def dashboard():
             if hasattr(value, 'isoformat'):
                 trip[field] = value.isoformat()
     
-    return render_template('dashboard.html', stats=stats, recent=recent, username=session['username'])
+    return render_template(
+        'dashboard.html', stats=stats, recent=recent, username=session['username'],
+        gamification=gamification, weekly_challenges=weekly_challenges
+    )
 
 @app.route('/history')
 def history():

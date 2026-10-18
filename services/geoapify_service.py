@@ -14,9 +14,9 @@ class GeoapifyService:
         # Check if identical (approx)
         if abs(origin_lat - dest_lat) < 0.0001 and abs(origin_lon - dest_lon) < 0.0001:
             return {
-                'driving': {'distance_km': 0, 'duration_min': 0, 'geometry': []},
-                'walking': {'distance_km': 0, 'duration_min': 0, 'geometry': []},
-                'cycling': {'distance_km': 0, 'duration_min': 0, 'geometry': []}
+                'driving': {'distance_km': 0, 'duration_min': 0, 'geometry': [], 'provider': 'Geoapify', 'is_estimate': False},
+                'walking': {'distance_km': 0, 'duration_min': 0, 'geometry': [], 'provider': 'Geoapify', 'is_estimate': False},
+                'cycling': {'distance_km': 0, 'duration_min': 0, 'geometry': [], 'provider': 'Geoapify', 'is_estimate': False}
             }
         
         res = {}
@@ -41,23 +41,17 @@ class GeoapifyService:
                     'returnElevation': 'false'
                 }
                 
-                print(f"Geoapify request for {mode_key}: {url}")
-                print(f"Geoapify params: {params}")
-                
                 response = requests.get(url, params=params, timeout=10)
                 print(f"Geoapify response status: {response.status_code}")
                 
                 if response.status_code != 200:
-                    print(f"Geoapify error response: {response.text}")
-                    raise Exception(f"HTTP {response.status_code}: {response.text}")
+                    raise Exception(f"HTTP {response.status_code}")
                 
                 try:
                     data = response.json()
-                    print(f"Geoapify JSON response: {data}")
                 except ValueError as e:
-                    print(f"Geoapify JSON parse error: {e}")
-                    print(f"Geoapify raw response: {response.text}")
-                    raise Exception(f"Invalid JSON response: {e}")
+                    print(f"Geoapify JSON parse failed ({type(e).__name__}).")
+                    raise Exception("Invalid Geoapify JSON response")
                 
                 if 'features' in data and len(data['features']) > 0:
                     feature = data['features'][0]
@@ -81,15 +75,16 @@ class GeoapifyService:
                     res[mode_key] = {
                         'distance_km': round(dist_km, 2),
                         'duration_min': round(dur_min, 0),
-                        'geometry': geometry
+                        'geometry': geometry,
+                        'provider': 'Geoapify',
+                        'is_estimate': False
                     }
                     print(f"Geoapify success for {mode_key}: {dist_km}km, {dur_min}min, {len(geometry)} points")
                 else:
-                    print(f"Geoapify no features found in response: {data}")
                     raise Exception("No route found in Geoapify response")
                     
             except Exception as e:
-                print(f"Geoapify API ({mode_key}) failed: {e}. Using fallback.")
+                print(f"Geoapify API ({mode_key}) failed ({type(e).__name__}); using estimate.")
                 # Fallback: Haversine distance * factor
                 straight_dist = GeoapifyService.haversine(origin_lat, origin_lon, dest_lat, dest_lon)
                 
@@ -103,7 +98,9 @@ class GeoapifyService:
                 res[mode_key] = {
                     'distance_km': round(est_dist, 2),
                     'duration_min': round(est_dur, 0),
-                    'geometry': [[origin_lat, origin_lon], [dest_lat, dest_lon]]
+                    'geometry': [[origin_lat, origin_lon], [dest_lat, dest_lon]],
+                    'provider': 'built-in estimate',
+                    'is_estimate': True
                 }
         
         return res

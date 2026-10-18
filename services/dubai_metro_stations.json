@@ -1,0 +1,329 @@
+{
+  "source": "OpenStreetMap contributors (ODbL), station=subway and network=Dubai Metro; snapshot 2026-10-18",
+  "stations": [
+    {
+      "name": "Burj Khalifa / Dubai Mall",
+      "lat": 25.2014367,
+      "lon": 55.2695451,
+      "ref": "25"
+    },
+    {
+      "name": "Emirates Towers",
+      "lat": 25.217231,
+      "lon": 55.279881,
+      "ref": "23"
+    },
+    {
+      "name": "Airport Terminal 3",
+      "lat": 25.245027,
+      "lon": 55.3594972,
+      "ref": "13"
+    },
+    {
+      "name": "Business Bay",
+      "lat": 25.1913122,
+      "lon": 55.2603981,
+      "ref": "26"
+    },
+    {
+      "name": "Al Furjan",
+      "lat": 25.0304736,
+      "lon": 55.1522307,
+      "ref": "72"
+    },
+    {
+      "name": "Discovery Gardens",
+      "lat": 25.0352571,
+      "lon": 55.1454134,
+      "ref": "71"
+    },
+    {
+      "name": "e&",
+      "lat": 25.2547338,
+      "lon": 55.4012781,
+      "ref": "11"
+    },
+    {
+      "name": "Al Nahda",
+      "lat": 25.2732083,
+      "lon": 55.3694757,
+      "ref": "14"
+    },
+    {
+      "name": "Stadium",
+      "lat": 25.27791,
+      "lon": 55.361466,
+      "ref": "15"
+    },
+    {
+      "name": "Abu Hail",
+      "lat": 25.2754161,
+      "lon": 55.3464499,
+      "ref": "17"
+    },
+    {
+      "name": "Al Qiyadah",
+      "lat": 25.2775853,
+      "lon": 55.3526309,
+      "ref": "16"
+    },
+    {
+      "name": "Abu Baker Al Siddique",
+      "lat": 25.2708929,
+      "lon": 55.3327545,
+      "ref": "18"
+    },
+    {
+      "name": "Union",
+      "lat": 25.2661816,
+      "lon": 55.3137508,
+      "ref": "18;20"
+    },
+    {
+      "name": "Salah Al Din",
+      "lat": 25.2703152,
+      "lon": 55.3208284,
+      "ref": "19"
+    },
+    {
+      "name": "Baniyas Square",
+      "lat": 25.2691743,
+      "lon": 55.3076094,
+      "ref": "21"
+    },
+    {
+      "name": "Gold Souq",
+      "lat": 25.2761408,
+      "lon": 55.3016752,
+      "ref": "22"
+    },
+    {
+      "name": "Al Ras",
+      "lat": 25.2687742,
+      "lon": 55.2936231,
+      "ref": "23"
+    },
+    {
+      "name": "Al Ghubaiba",
+      "lat": 25.2650351,
+      "lon": 55.2889404,
+      "ref": "24"
+    },
+    {
+      "name": "Sharaf DG",
+      "lat": 25.2582139,
+      "lon": 55.2974781,
+      "ref": "25"
+    },
+    {
+      "name": "BurJuman",
+      "lat": 25.25499,
+      "lon": 55.303941,
+      "ref": "26"
+    },
+    {
+      "name": "Oud Metha",
+      "lat": 25.2439301,
+      "lon": 55.3158939,
+      "ref": "27"
+    },
+    {
+      "name": "Dubai Healthcare City",
+      "lat": 25.2309528,
+      "lon": 55.322619,
+      "ref": "28"
+    },
+    {
+      "name": "Al Jadaf",
+      "lat": 25.2249103,
+      "lon": 55.3337479,
+      "ref": "29"
+    },
+    {
+      "name": "Creek",
+      "lat": 25.2188806,
+      "lon": 55.3390384,
+      "ref": "30"
+    },
+    {
+      "name": "Al Qusais",
+      "lat": 25.2627427,
+      "lon": 55.3872735,
+      "ref": "12"
+    },
+    {
+      "name": "Dubai Airport Free Zone",
+      "lat": 25.2698284,
+      "lon": 55.3751502,
+      "ref": "13"
+    },
+    {
+      "name": "Danube",
+      "lat": 25.0012905,
+      "lon": 55.0957087,
+      "ref": "41"
+    },
+    {
+      "name": "Life Pharmacy",
+      "lat": 24.9775987,
+      "lon": 55.0910742,
+      "ref": "42"
+    },
+    {
+      "name": "Centrepoint",
+      "lat": 25.2303111,
+      "lon": 55.3911232,
+      "ref": "R11"
+    },
+    {
+      "name": "Energy",
+      "lat": 25.0263116,
+      "lon": 55.1012953,
+      "ref": "40"
+    },
+    {
+      "name": "Ibn Battuta",
+      "lat": 25.0466788,
+      "lon": 55.1174939,
+      "ref": "39"
+    },
+    {
+      "name": "Sobha Realty",
+      "lat": 25.0799429,
+      "lon": 55.1475417,
+      "ref": "36"
+    },
+    {
+      "name": "Al Fardan Exchange",
+      "lat": 25.0889162,
+      "lon": 55.1581735,
+      "ref": ""
+    },
+    {
+      "name": "Dubai Internet City",
+      "lat": 25.1021654,
+      "lon": 55.1739012,
+      "ref": "34"
+    },
+    {
+      "name": "InsuranceMarket",
+      "lat": 25.1147739,
+      "lon": 55.1908862,
+      "ref": "33"
+    },
+    {
+      "name": "Mall of the Emirates",
+      "lat": 25.1212029,
+      "lon": 55.2004469,
+      "ref": "32"
+    },
+    {
+      "name": "Equiti",
+      "lat": 25.1266839,
+      "lon": 55.2079196,
+      "ref": "31"
+    },
+    {
+      "name": "Garmin",
+      "lat": 25.15563,
+      "lon": 55.2285156,
+      "ref": "29"
+    },
+    {
+      "name": "Financial Centre",
+      "lat": 25.2108215,
+      "lon": 55.2755321,
+      "ref": "24"
+    },
+    {
+      "name": "Emirates",
+      "lat": 25.2410612,
+      "lon": 55.36568,
+      "ref": "12"
+    },
+    {
+      "name": "Airport Terminal 1",
+      "lat": 25.2484769,
+      "lon": 55.3523558,
+      "ref": "14"
+    },
+    {
+      "name": "Al Garhoud",
+      "lat": 25.2494824,
+      "lon": 55.3399801,
+      "ref": "15"
+    },
+    {
+      "name": "Al Rigga",
+      "lat": 25.2633466,
+      "lon": 55.3238862,
+      "ref": "17"
+    },
+    {
+      "name": "Bur Juman",
+      "lat": 25.2543976,
+      "lon": 55.30412,
+      "ref": "19"
+    },
+    {
+      "name": "ADCB",
+      "lat": 25.2445099,
+      "lon": 55.2981834,
+      "ref": "20"
+    },
+    {
+      "name": "max",
+      "lat": 25.2335944,
+      "lon": 55.2921844,
+      "ref": "21"
+    },
+    {
+      "name": "World Trade Centre",
+      "lat": 25.2248353,
+      "lon": 55.2851186,
+      "ref": "22"
+    },
+    {
+      "name": "Deira City Centre",
+      "lat": 25.2546811,
+      "lon": 55.3302605,
+      "ref": "16"
+    },
+    {
+      "name": "National Paints",
+      "lat": 25.0578769,
+      "lon": 55.1273617,
+      "ref": "38"
+    },
+    {
+      "name": "The Gardens",
+      "lat": 25.0435023,
+      "lon": 55.1350461,
+      "ref": "70"
+    },
+    {
+      "name": "DMCC",
+      "lat": 25.0708766,
+      "lon": 55.1387113,
+      "ref": "37"
+    },
+    {
+      "name": "Jumeirah Golf Estates",
+      "lat": 25.0177925,
+      "lon": 55.1633352,
+      "ref": "73"
+    },
+    {
+      "name": "Dubai Investment Park",
+      "lat": 25.0052466,
+      "lon": 55.1556654,
+      "ref": "74"
+    },
+    {
+      "name": "Expo City Dubai",
+      "lat": 24.9634934,
+      "lon": 55.1460846,
+      "ref": "76"
+    }
+  ]
+}

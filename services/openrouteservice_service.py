@@ -57,13 +57,13 @@ class OpenRouteService:
             }
             
         except requests.exceptions.RequestException as e:
-            print(f"OpenRouteService API request failed: {e}")
-            raise Exception(f"OpenRouteService API error: {str(e)}")
+            print(f"OpenRouteService API request failed ({type(e).__name__}).")
+            raise Exception("OpenRouteService API request failed")
         except (KeyError, IndexError, json.JSONDecodeError) as e:
-            print(f"OpenRouteService response parsing failed: {e}")
-            raise Exception(f"OpenRouteService response error: {str(e)}")
+            print(f"OpenRouteService response parsing failed ({type(e).__name__}).")
+            raise Exception("OpenRouteService response parsing failed")
         except Exception as e:
-            print(f"OpenRouteService error: {e}")
+            print(f"OpenRouteService error ({type(e).__name__}).")
             raise
     
     @staticmethod
@@ -87,11 +87,13 @@ class OpenRouteService:
                 route_data = OpenRouteService.get_route(
                     origin_lat, origin_lon, dest_lat, dest_lon, ors_mode
                 )
+                route_data['provider'] = 'OpenRouteService'
+                route_data['is_estimate'] = False
                 results[mode] = route_data
                 print(f"OpenRouteService {mode} route: {route_data['distance_km']}km, {route_data['duration_min']}min")
                 
             except Exception as e:
-                print(f"Failed to get {mode} route from OpenRouteService: {e}")
+                print(f"Failed to get {mode} route from OpenRouteService ({type(e).__name__}).")
                 # Fallback to basic calculation
                 straight_dist = OpenRouteService.haversine(origin_lat, origin_lon, dest_lat, dest_lon)
                 
@@ -113,7 +115,9 @@ class OpenRouteService:
                 results[mode] = {
                     'distance_km': round(straight_dist * multiplier, 2),
                     'duration_min': round((straight_dist * multiplier / speed) * 60, 0),
-                    'geometry': [[origin_lat, origin_lon], [dest_lat, dest_lon]]
+                    'geometry': [[origin_lat, origin_lon], [dest_lat, dest_lon]],
+                    'provider': 'built-in estimate',
+                    'is_estimate': True
                 }
         
         return results
