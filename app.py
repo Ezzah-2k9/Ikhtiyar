@@ -18,6 +18,7 @@ from services.weather_service import WeatherService
 from services.transit_availability import check_metro_availability
 from services.traffic_service import TrafficService
 from services.gamification import build_weekly_challenges, current_week_start, level_from_points, uae_today
+from services.monthly_goals import build_goal_state, month_key, previous_month_key
 from ml.predictor import TransportPredictor
 from ml.trip_recommender import TripRecommender
 import os
@@ -28,6 +29,36 @@ trip_quote_serializer = URLSafeTimedSerializer(app.secret_key)
 
 db = DBManager()
 feature_store = FeatureStore(db)
+
+
+def monthly_goal_context(user_id, history, today=None):
+    today = today or uae_today()
+    privacy = db.get_privacy_settings(user_id)
+    history_saving_enabled = bool(privacy.get('save_trip_history', True))
+    period = month_key(today)
+    current = build_goal_state(
+        feature_store.get_monthly_goal(user_id, period), history, today
+    )
+    if current:
+        current['history_saving_enabled'] = history_saving_enabled
+    previous_period = previous_month_key(today)
+    previous = build_goal_state(
+        feature_store.get_monthly_goal(user_id, previous_period), history, today,
+        finished=True,
+    )
+    if previous:
+        previous['notice'] = (
+            f"You reached last month's CO₂-saving target: {previous['saved_co2_kg']:.2f} kg saved "
+            f"of {previous['target_co2_kg']:.2f} kg."
+            if previous['reached'] else
+            f"Last month's CO₂-saving target was not met: {previous['saved_co2_kg']:.2f} kg saved "
+            f"of {previous['target_co2_kg']:.2f} kg. You can set a new target for this month."
+        )
+    return {
+        'current': current,
+        'previous_notice': previous,
+        'history_saving_enabled': history_saving_enabled,
+    }
 
 @app.route('/')
 def landing():
@@ -76,10 +107,11 @@ def index():
     # Get trip count for AI progress banner
     history = db.get_history(session['user_id'])
     trip_count = len(history)
+    monthly_goal = monthly_goal_context(session['user_id'], history)['current']
     
     return render_template(
         'index.html', username=session['username'], trip_count=trip_count,
-        traffic_available=bool(Config.TOMTOM_KEY)
+        traffic_available=TrafficService.is_configured(), monthly_goal=monthly_goal
     )
 
 @app.route('/api/saved-destinations', methods=['GET', 'POST'])
@@ -187,13 +219,12 @@ def calculate_route():
         data = request.get_json(silent=True) or {}
         origin_name = str(data.get('origin', '')).strip()
         dest_name = str(data.get('destination', '')).strip()
-        goal = str(data.get('goal', 'balanced')).lower()
+        # Route ranking is based on saved preferences and the persistent monthly goal.
+        goal = 'balanced'
         if not origin_name or not dest_name:
             return jsonify({'error': 'Origin and destination are required'}), 400
         if len(origin_name) > 140 or len(dest_name) > 140:
             return jsonify({'error': 'Place names must be 140 characters or less.'}), 400
-        if goal not in {'balanced', 'fastest', 'cheapest', 'eco', 'shortest'}:
-            goal = 'balanced'
 
         try:
             def resolve_place(name, prefix):
@@ -230,6 +261,9 @@ def calculate_route():
             print(f"Route calculation failed ({type(error).__name__}).")
             return jsonify({'error': 'Route calculation failed. Please try again.'}), 500
 
+        user_history = db.get_history(session['user_id'])
+        goal_context = monthly_goal_context(session['user_id'], user_history)
+        monthly_goal = goal_context['current']
         prefs = db.get_preferences(session['user_id']) or {}
         max_walk_temp = float(prefs.get('max_walking_temp', 40) or 40)
         try:
@@ -256,13 +290,14 @@ def calculate_route():
             print(f"Transport predictor unavailable: {error}")
             recommended_mode = 'driving'
 
-        goal_labels = {
-            'balanced': 'YOUR PREFERENCES',
-            'fastest': 'FASTEST ARRIVAL',
-            'cheapest': 'LOWEST ESTIMATED COST',
-            'eco': 'LOWEST ESTIMATED EMISSIONS',
-            'shortest': 'SHORTEST DISTANCE',
-        }
+        monthly_goal_active = bool(
+            monthly_goal and monthly_goal['behind_pace']
+            and goal_context['history_saving_enabled']
+        )
+        goal_label = (
+            'MONTHLY CO₂ GOAL' if monthly_goal_active
+            else 'YOUR PREFERENCES'
+        )
         modes = ['driving', 'taxi', 'bus', 'walking', 'cycling']
         if metro_info.get('available'):
             modes.insert(2, 'metro')
@@ -343,15 +378,14 @@ def calculate_route():
             max(1, min(10, int(prefs.get('priority_cost', 5)))),
             max(1, min(10, int(prefs.get('priority_environment', 5)))),
         ]
-        if goal == 'balanced':
-            weight_sum = sum(raw_preferences) or 1
-            weights = [value / weight_sum for value in raw_preferences]
-        else:
-            weights = {
-                'fastest': (0.92, 0.04, 0.04),
-                'cheapest': (0.04, 0.92, 0.04),
-                'eco': (0.04, 0.04, 0.92),
-            }.get(goal, (0.03, 0.03, 0.03))
+        if monthly_goal_active:
+            # The month is cumulative: bias the recommendation toward CO₂ savings
+            # while still leaving every mode selectable for time-sensitive trips.
+            raw_preferences[2] = max(
+                raw_preferences[2], 3 * (raw_preferences[0] + raw_preferences[1])
+            )
+        weight_sum = sum(raw_preferences) or 1
+        weights = [value / weight_sum for value in raw_preferences]
 
         def utility(value, values):
             low, high = min(values), max(values)
@@ -365,24 +399,16 @@ def calculate_route():
         }
         budget = float(prefs.get('budget_per_trip', 50) or 0)
         for index, item in enumerate(results):
-            if goal == 'shortest':
-                score = (
-                    0.91 * utility(score_metrics['distance'][index], score_metrics['distance'])
-                    + 0.03 * utility(score_metrics['time'][index], score_metrics['time'])
-                    + 0.03 * utility(score_metrics['cost'][index], score_metrics['cost'])
-                    + 0.03 * utility(score_metrics['co2'][index], score_metrics['co2'])
-                )
-            else:
-                score = (
-                    weights[0] * utility(score_metrics['time'][index], score_metrics['time'])
-                    + weights[1] * utility(score_metrics['cost'][index], score_metrics['cost'])
-                    + weights[2] * utility(score_metrics['co2'][index], score_metrics['co2'])
-                )
+            score = (
+                weights[0] * utility(score_metrics['time'][index], score_metrics['time'])
+                + weights[1] * utility(score_metrics['cost'][index], score_metrics['cost'])
+                + weights[2] * utility(score_metrics['co2'][index], score_metrics['co2'])
+            )
             if budget > 0 and float(item['cost'] or 0) > budget:
                 score *= 0.85
             if apparent_temp is not None and apparent_temp >= max_walk_temp and item['mode'] in ('walking', 'cycling'):
                 score *= 0.65
-            if goal == 'balanced' and item['mode'] == recommended_mode:
+            if item['mode'] == recommended_mode:
                 score += 0.02
             item['_rank_score'] = score
 
@@ -405,13 +431,13 @@ def calculate_route():
                 'driving_co2_baseline': float(driving_co2),
             }, salt='ikhtiyar-route-quote')
 
-        if routes.get('is_estimate', True):
+        if driving.get('is_estimate', True):
             route_estimate_note = (
-                f"Road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is an approximate direction, not a street-level route. "
-                "Add a valid routing key to Render for provider-based route geometry. "
+                f"Driving road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is only an approximate direction, not a street-level route. "
+                "A configured routing provider may improve route accuracy. "
             )
         else:
-            route_estimate_note = f"Road source: {routes.get('provider', 'routing provider')}. Public-transit fares and times remain estimates. "
+            route_estimate_note = f"Driving road source: {driving.get('provider', routes.get('provider', 'routing provider'))}; the solid map line follows mapped streets. Walking, cycling, and public-transit values may still be estimates. "
         route_estimate_note += (
             f"Metro check: {metro_info.get('reason', 'station coverage could not be confirmed')} "
             "Metro coverage uses mapped Dubai stations, not a live itinerary or timetable."
@@ -424,8 +450,9 @@ def calculate_route():
             'requested_destination_name': dest_name,
             'results': results,
             'driving_co2_baseline': driving_co2,
-            'goal': goal,
-            'goal_label': goal_labels[goal],
+            'goal': 'monthly' if monthly_goal_active else 'preferences',
+            'goal_label': goal_label,
+            'monthly_goal': monthly_goal,
             'weather': weather,
             'metro_availability': metro_info,
             'route_provider': routes.get('provider', 'built-in estimate'),
@@ -544,6 +571,7 @@ def dashboard():
     # Recent trips
     history = db.get_history(session['user_id'])
     recent = history[:5]
+    monthly_goals = monthly_goal_context(session['user_id'], history)
     today = uae_today()
     week_start = current_week_start(today).isoformat()
     weekly_challenges = build_weekly_challenges(history, today)
@@ -574,7 +602,8 @@ def dashboard():
     
     return render_template(
         'dashboard.html', stats=stats, recent=recent, username=session['username'],
-        gamification=gamification, weekly_challenges=weekly_challenges
+        gamification=gamification, weekly_challenges=weekly_challenges,
+        monthly_goal=monthly_goals['current'], monthly_goal_notice=monthly_goals['previous_notice']
     )
 
 @app.route('/history')
@@ -656,6 +685,22 @@ def settings():
             flash('Privacy settings saved.', 'success')
             return redirect(url_for('settings', tab='privacy'))
 
+        if action == 'monthly_goal':
+            try:
+                target = float(request.form.get('target_co2_kg', '0'))
+                if not math.isfinite(target) or not 0 <= target <= 1000:
+                    raise ValueError('Enter a monthly CO₂ target from 0 to 1,000 kg.')
+                period = month_key(uae_today())
+                if target == 0:
+                    feature_store.remove_monthly_goal(user_id, period)
+                    flash('The monthly CO₂ goal is turned off for this month.', 'success')
+                else:
+                    feature_store.save_monthly_goal(user_id, period, round(target, 2))
+                    flash('Monthly CO₂ goal saved. All saved trips this month count toward it.', 'success')
+            except (TypeError, ValueError) as error:
+                flash(str(error) or 'Enter a valid monthly CO₂ target.', 'error')
+            return redirect(url_for('settings', tab='preferences'))
+
         flash('That settings action is not recognized.', 'error')
         return redirect(url_for('settings'))
 
@@ -665,12 +710,18 @@ def settings():
         'max_walking_temp': 40, 'budget_per_trip': 50
     }
     privacy = db.get_privacy_settings(user_id)
+    current_month = month_key(uae_today())
+    monthly_goal = feature_store.get_monthly_goal(user_id, current_month)
+    monthly_goal_state = build_goal_state(monthly_goal, db.get_history(user_id), uae_today())
+    if monthly_goal_state:
+        monthly_goal_state['history_saving_enabled'] = bool(privacy.get('save_trip_history', True))
     active_tab = request.args.get('tab', 'profile')
     if active_tab not in ('profile', 'preferences', 'privacy'):
         active_tab = 'profile'
     return render_template(
         'settings.html', user=user, prefs=prefs, privacy=privacy,
-        username=session['username'], email=user.get('email', ''), active_tab=active_tab
+        username=session['username'], email=user.get('email', ''), active_tab=active_tab,
+        monthly_goal=monthly_goal_state
     )
 
 @app.route('/settings/export')

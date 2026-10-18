@@ -44,23 +44,17 @@ class GraphHopperService:
                     'out_encoder': 'polyline'
                 }
                 
-                print(f"GraphHopper request URL: {url}")
-                print(f"GraphHopper params: {params}")
-                
                 response = requests.get(url, params=params, timeout=10)
                 print(f"GraphHopper response status: {response.status_code}")
                 
                 if response.status_code != 200:
-                    print(f"GraphHopper error response: {response.text}")
-                    raise Exception(f"HTTP {response.status_code}: {response.text}")
+                    raise Exception(f"HTTP {response.status_code}")
                 
                 try:
                     data = response.json()
-                    print(f"GraphHopper JSON response: {data}")
                 except ValueError as e:
-                    print(f"GraphHopper JSON parse error: {e}")
-                    print(f"GraphHopper raw response: {response.text}")
-                    raise Exception(f"Invalid JSON response: {e}")
+                    print(f"GraphHopper JSON parse failed ({type(e).__name__}).")
+                    raise Exception("Invalid GraphHopper JSON response")
                 
                 if 'paths' in data and len(data['paths']) > 0:
                     path = data['paths'][0]
@@ -85,11 +79,10 @@ class GraphHopperService:
                     }
                     print(f"GraphHopper success for {mode_key}: {dist_km}km, {dur_min}min, {len(geometry)} points")
                 else:
-                    print(f"GraphHopper no paths found in response: {data}")
                     raise Exception("No route found in GraphHopper response")
                     
             except Exception as e:
-                print(f"GraphHopper API ({mode_key}) failed: {e}. Using fallback.")
+                print(f"GraphHopper API ({mode_key}) failed ({type(e).__name__}); using estimate.")
                 # Fallback: Haversine distance * factor
                 straight_dist = GraphHopperService.haversine(origin_lat, origin_lon, dest_lat, dest_lon)
                 

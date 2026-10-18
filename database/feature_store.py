@@ -61,6 +61,15 @@ class FeatureStore:
                         claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS monthly_travel_goals (
+                        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        month TEXT NOT NULL,
+                        target_co2_kg DOUBLE PRECISION NOT NULL CHECK (target_co2_kg > 0),
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (user_id, month)
+                    )
+                """)
             else:
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS saved_destinations (
@@ -103,6 +112,16 @@ class FeatureStore:
                         quote_id TEXT PRIMARY KEY,
                         user_id INTEGER NOT NULL,
                         claimed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS monthly_travel_goals (
+                        user_id INTEGER NOT NULL,
+                        month TEXT NOT NULL,
+                        target_co2_kg REAL NOT NULL CHECK (target_co2_kg > 0),
+                        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (user_id, month),
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                     )
                 """)
@@ -177,6 +196,64 @@ class FeatureStore:
                 claimed = cursor.rowcount > 0
             conn.commit()
             return claimed
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_monthly_goal(self, user_id, month):
+        conn, cursor = self.db.get_connection()
+        try:
+            placeholder = "%s" if USING_POSTGRES else "?"
+            cursor.execute(
+                f"SELECT user_id, month, target_co2_kg, updated_at FROM monthly_travel_goals "
+                f"WHERE user_id = {placeholder} AND month = {placeholder}",
+                (user_id, month),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    def save_monthly_goal(self, user_id, month, target_co2_kg):
+        """Upsert this user's target for a single calendar month."""
+        conn, cursor = self.db.get_connection()
+        try:
+            if USING_POSTGRES:
+                cursor.execute(
+                    "INSERT INTO monthly_travel_goals (user_id, month, target_co2_kg) "
+                    "VALUES (%s, %s, %s) ON CONFLICT (user_id, month) DO UPDATE "
+                    "SET target_co2_kg = EXCLUDED.target_co2_kg, updated_at = CURRENT_TIMESTAMP",
+                    (user_id, month, target_co2_kg),
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO monthly_travel_goals (user_id, month, target_co2_kg) "
+                    "VALUES (?, ?, ?) ON CONFLICT(user_id, month) DO UPDATE "
+                    "SET target_co2_kg = excluded.target_co2_kg, updated_at = CURRENT_TIMESTAMP",
+                    (user_id, month, target_co2_kg),
+                )
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+    def remove_monthly_goal(self, user_id, month):
+        conn, cursor = self.db.get_connection()
+        try:
+            placeholder = "%s" if USING_POSTGRES else "?"
+            cursor.execute(
+                f"DELETE FROM monthly_travel_goals WHERE user_id = {placeholder} AND month = {placeholder}",
+                (user_id, month),
+            )
+            conn.commit()
         except Exception:
             conn.rollback()
             raise

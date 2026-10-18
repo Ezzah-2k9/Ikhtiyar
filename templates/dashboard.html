@@ -68,6 +68,26 @@
                     </div>
                 </div>
 
+                {% if monthly_goal_notice %}
+                <aside class="monthly-goal-notice {{ 'is-reached' if monthly_goal_notice.reached else 'is-missed' }}" role="status">
+                    <span class="monthly-goal-notice-icon"><i class="fa-solid {{ 'fa-circle-check' if monthly_goal_notice.reached else 'fa-circle-exclamation' }}" aria-hidden="true"></i></span>
+                    <div><strong>{{ 'Last month’s target reached' if monthly_goal_notice.reached else 'Last month’s target not reached' }}</strong><p>{{ monthly_goal_notice.notice }}</p></div>
+                </aside>
+                {% endif %}
+
+                <section class="monthly-goal-dashboard reveal-on-scroll" aria-labelledby="dashboard-monthly-goal-title">
+                    <div class="monthly-goal-dashboard-copy"><span class="page-kicker">YOUR MONTH · YOUR OWN PACE</span><h2 id="dashboard-monthly-goal-title">Monthly CO₂-saving target</h2>
+                    {% if monthly_goal %}
+                    <p>Saved <strong>{{ '%.2f'|format(monthly_goal.saved_co2_kg) }} kg</strong> of <strong>{{ '%.2f'|format(monthly_goal.target_co2_kg) }} kg</strong> this month. A fast trip does not erase progress; later trips add to the same total.</p>
+                    <div class="monthly-goal-progress" role="progressbar" aria-label="Monthly CO2 savings goal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ monthly_goal.progress_percent }}"><span style="width: {{ monthly_goal.progress_percent }}%"></span></div>
+                    <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.remaining_co2_kg <= 0 %}Target reached. Every additional saving is a bonus.{% elif monthly_goal.behind_pace %}{{ '%.2f'|format(monthly_goal.remaining_co2_kg) }} kg remaining. The calculator will favour lower-emission options, but all options stay available.{% else %}{{ '%.2f'|format(monthly_goal.remaining_co2_kg) }} kg remaining. You are on pace.{% endif %}</small>
+                    {% else %}
+                    <p>No monthly target is set. Choose one in Preferences; the calculator will track your combined trips through the month.</p>
+                    {% endif %}
+                    </div>
+                    <a class="monthly-goal-link" href="{{ url_for('settings', tab='preferences') }}#monthly-goal">{% if monthly_goal %}Edit target{% else %}Set a target{% endif %}<span aria-hidden="true">↗</span></a>
+                </section>
+
                 <section class="gamification-panel reveal-on-scroll" aria-labelledby="journey-level-title">
                     <div class="gamification-top">
                         <div>

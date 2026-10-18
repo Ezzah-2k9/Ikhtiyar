@@ -14,9 +14,9 @@ class TomTomService:
         # Check if identical (approx)
         if abs(origin_lat - dest_lat) < 0.0001 and abs(origin_lon - dest_lon) < 0.0001:
             return {
-                'driving': {'distance_km': 0, 'duration_min': 0, 'geometry': []},
-                'walking': {'distance_km': 0, 'duration_min': 0, 'geometry': []},
-                'cycling': {'distance_km': 0, 'duration_min': 0, 'geometry': []}
+                'driving': {'distance_km': 0, 'duration_min': 0, 'geometry': [], 'provider': 'TomTom', 'is_estimate': False},
+                'walking': {'distance_km': 0, 'duration_min': 0, 'geometry': [], 'provider': 'TomTom', 'is_estimate': False},
+                'cycling': {'distance_km': 0, 'duration_min': 0, 'geometry': [], 'provider': 'TomTom', 'is_estimate': False}
             }
         
         res = {}
@@ -66,13 +66,15 @@ class TomTomService:
                     res[mode_key] = {
                         'distance_km': round(dist_km, 2),
                         'duration_min': round(dur_min, 0),
-                        'geometry': geometry
+                        'geometry': geometry,
+                        'provider': 'TomTom',
+                        'is_estimate': False
                     }
                 else:
                     raise Exception("No route found in TomTom response")
                     
             except Exception as e:
-                print(f"TomTom API ({mode_key}) failed: {e}. Using fallback.")
+                print(f"TomTom API ({mode_key}) failed ({type(e).__name__}); using estimate.")
                 # Fallback: Haversine distance * factor
                 straight_dist = TomTomService.haversine(origin_lat, origin_lon, dest_lat, dest_lon)
                 
@@ -86,7 +88,9 @@ class TomTomService:
                 res[mode_key] = {
                     'distance_km': round(est_dist, 2),
                     'duration_min': round(est_dur, 0),
-                    'geometry': [[origin_lat, origin_lon], [dest_lat, dest_lon]]
+                    'geometry': [[origin_lat, origin_lon], [dest_lat, dest_lon]],
+                    'provider': 'built-in estimate',
+                    'is_estimate': True
                 }
         
         return res

@@ -454,17 +454,21 @@
 
                         <p class="location-privacy-note">On submit, locations are sent to the configured geocoder, weather, and routing providers. Public no-key search is for public landmarks only; its basic address filter is not a privacy guarantee. Do not submit private locations without a trusted LocationIQ key configured in Render.</p>
 
-                        <div class="route-goal-control">
-                            <label for="route-goal">What matters most for this trip?</label>
-                            <select id="route-goal" name="goal">
-                                <option value="balanced">My saved preferences</option>
-                                <option value="fastest">Fastest arrival</option>
-                                <option value="cheapest">Lowest estimated cost</option>
-                                <option value="eco">Lowest estimated emissions</option>
-                                <option value="shortest">Shortest distance</option>
-                            </select>
-                            <small class="goal-caption">All available options stay visible; the selected goal changes the recommendation ranking.</small>
-                        </div>
+                        <section class="monthly-goal-peek" aria-labelledby="calculator-monthly-goal-title">
+                            <div class="monthly-goal-peek-heading">
+                                <span class="goal-emblem" aria-hidden="true"><i class="fa-solid fa-leaf"></i></span>
+                                <div><span class="page-kicker">YOUR MONTHLY TARGET</span><h4 id="calculator-monthly-goal-title">CO₂ savings</h4></div>
+                            </div>
+                            {% if monthly_goal %}
+                            <div class="monthly-goal-peek-progress"><span style="width: {{ monthly_goal.progress_percent }}%"></span></div>
+                            <p><strong>{{ "%.2f"|format(monthly_goal.saved_co2_kg) }} / {{ "%.2f"|format(monthly_goal.target_co2_kg) }} kg</strong> saved this month</p>
+                            <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.remaining_co2_kg <= 0 %}Target reached. Keep recording your journeys.{% else %}{{ "%.2f"|format(monthly_goal.remaining_co2_kg) }} kg to go. A fast trip is fine—greener trips later in the month can make up the difference.{% endif %}</small>
+                            {% else %}
+                            <p>No target set for this month.</p>
+                            <small>Set it once in Preferences; this page will keep showing your progress.</small>
+                            {% endif %}
+                            <a href="{{ url_for('settings', tab='preferences') }}#monthly-goal">{% if monthly_goal %}Adjust monthly target{% else %}Set a monthly target{% endif %} <span aria-hidden="true">↗</span></a>
+                        </section>
 
                         <button class="btn btn-primary btn-full-width" onclick="calculateRoute()">
                             <i class="fas fa-search"></i> Compare Options
@@ -479,16 +483,19 @@
                     </div>
 
                     <div class="map-container">
+                        <div class="map-panel-heading">
+                            <div><span class="page-kicker">YOUR JOURNEY</span><h3>Route &amp; live conditions</h3><p>Plan with a mapped route, current traffic flow, and destination weather.</p></div>
+                            <span class="map-panel-badge"><i aria-hidden="true"></i> MAP VIEW</span>
+                        </div>
                         <div class="map-toolbar">
-                            <button id="traffic-toggle" type="button" aria-pressed="false">Show traffic</button>
+                            <div class="traffic-control-group"><span class="traffic-control-label"><i class="fa-solid fa-road" aria-hidden="true"></i> TRAFFIC FLOW</span><button id="traffic-toggle" type="button" aria-pressed="false">Show traffic</button></div>
                             <small id="traffic-status" role="status">Traffic overlay status</small>
                             <div id="traffic-legend" class="traffic-legend" hidden aria-label="Traffic-flow legend">
                                 <span><i class="free"></i>Freer flow</span><span><i class="moderate"></i>Moderate</span><span><i class="slow"></i>Slow</span><span><i class="heavy"></i>Heavy</span>
                             </div>
                         </div>
                         <div id="map" data-traffic-available="{{ 'true' if traffic_available else 'false' }}"></div>
-                        <div id="weather-advisory" class="weather-advisory" role="status" aria-live="polite"></div>
-                        <div id="route-estimate-note" class="estimate-banner" hidden></div>
+                        <div class="map-data-notes"><div id="weather-advisory" class="weather-advisory" role="status" aria-live="polite"></div><div id="route-estimate-note" class="estimate-banner" hidden></div></div>
                     </div>
                 </div>
 
@@ -647,11 +654,7 @@
             loading.style.display = 'flex';
 
             try {
-                const routeRequest = {
-                    origin,
-                    destination,
-                    goal: document.getElementById('route-goal')?.value || 'balanced'
-                };
+                const routeRequest = { origin, destination };
                 [[originInput, 'origin'], [destinationInput, 'destination']].forEach(([input, prefix]) => {
                     const lat = Number(input.dataset.lat);
                     const lon = Number(input.dataset.lon);
@@ -692,7 +695,9 @@
             activeLayers.push(originMarker, destinationMarker);
 
             // Prefer the recommended option. Without provider geometry, show a dashed straight-line estimate.
-            const displayedRoute = data.results.find(r => r.is_recommended)
+            const displayedRoute = data.results.find(r => r.is_recommended && !r.is_estimate && r.geometry?.length > 2)
+                || data.results.find(r => r.mode === 'driving' && !r.is_estimate && r.geometry?.length > 2)
+                || data.results.find(r => r.is_recommended)
                 || data.results.find(r => r.mode === 'driving');
             const routeLine = displayedRoute
                 ? addRouteLine(map, displayedRoute, data.origin, data.destination)
@@ -746,15 +751,6 @@
                 card.appendChild(buttonContainer);
                 resultsGrid.appendChild(card);
 
-                // Draw alternative route lines (only if they have real geometry, not straight-line fallbacks)
-                if (res.geometry && res.geometry.length > 2 && res.mode !== 'driving') {
-                    L.polyline(res.geometry, {
-                        color: getTransportColor(res.mode),
-                        weight: 4,
-                        opacity: res.is_recommended ? 0.9 : 0.5,
-                        dashArray: res.is_recommended ? '' : '8, 8'
-                    }).addTo(map);
-                }
             });
 
             resultsSidebar.style.display = 'block';

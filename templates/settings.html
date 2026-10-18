@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/feature-enhancements.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body class="settings-page">
@@ -94,6 +95,15 @@
                             </div>
                             <div class="settings-form-actions"><p>Saved preferences are used in future route comparisons.</p><button type="submit" class="btn btn-primary"><i class="fa-solid fa-check" aria-hidden="true"></i> Save preferences</button></div>
                         </form>
+                        <section class="monthly-goal-settings" id="monthly-goal" aria-labelledby="monthly-goal-title">
+                            <div class="monthly-goal-settings-copy"><span class="page-kicker">ONE TARGET · ALL YOUR TRIPS</span><h3 id="monthly-goal-title">Monthly CO₂-saving goal</h3><p>Choose how many kilograms of CO₂ you want to save this month compared with driving every recorded trip. Each saved trip adds to the same monthly total. If you need to travel fast for a meeting, choose it; greener trips later can make up the difference.</p><p class="monthly-goal-privacy-note">Trips count only when trip-history saving is on. Enter 0 to turn this month's goal off.</p></div>
+                            <form method="post" action="{{ url_for('settings', tab='preferences') }}#monthly-goal" class="monthly-goal-form">
+                                <input type="hidden" name="action" value="monthly_goal">
+                                <label for="monthly-goal-target">This month’s target <span>kg CO₂</span></label>
+                                <div class="monthly-goal-form-row"><input id="monthly-goal-target" class="form-control" type="number" name="target_co2_kg" min="0" max="1000" step="0.1" value="{{ '%.2f'|format(monthly_goal.target_co2_kg) if monthly_goal else '' }}" placeholder="e.g., 10" required><button type="submit" class="btn btn-primary">Save monthly goal</button></div>
+                                <small>{% if monthly_goal and not monthly_goal.history_saving_enabled %}Trip-history saving is off, so new trips will not update monthly progress.{% elif monthly_goal %}{{ '%.2f'|format(monthly_goal.saved_co2_kg) }} kg saved so far · {{ '%.2f'|format(monthly_goal.remaining_co2_kg) }} kg remaining this month.{% else %}No target is currently set for this month.{% endif %}</small>
+                            </form>
+                        </section>
                     </div>
                 </section>
 
