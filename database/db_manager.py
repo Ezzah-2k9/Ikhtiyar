@@ -1,9 +1,12 @@
 
 import sqlite3
 import hashlib
+import hmac
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from config import Config
 import os
+from werkzeug.security import check_password_hash, generate_password_hash
 
 # Check if using PostgreSQL
 if Config.DB_PATH.startswith('postgresql://'):
@@ -196,7 +199,22 @@ class DBManager:
                 conn.close()
 
     def hash_password(self, password):
-        return hashlib.sha256(password.encode()).hexdigest()
+        return generate_password_hash(password, method='scrypt')
+
+    @staticmethod
+    def is_legacy_password_hash(stored_hash):
+        value = str(stored_hash or '')
+        return len(value) == 64 and all(char in '0123456789abcdefABCDEF' for char in value)
+
+    def verify_password(self, password, stored_hash):
+        value = str(stored_hash or '')
+        if self.is_legacy_password_hash(value):
+            legacy_digest = hashlib.sha256(password.encode()).hexdigest()
+            return hmac.compare_digest(value.lower(), legacy_digest)
+        try:
+            return check_password_hash(value, password)
+        except (TypeError, ValueError):
+            return False
 
     def register_user(self, username, email, password):
         conn, cursor = self.get_connection()
@@ -233,34 +251,35 @@ class DBManager:
 
     def verify_user(self, identifier, password):
         conn, cursor = self.get_connection()
-        hashed_pw = self.hash_password(password)
-
-        if USING_POSTGRES:
-            cursor.execute('SELECT * FROM users WHERE (username = %s OR email = %s) AND password = %s',
-                           (identifier, identifier, hashed_pw))
+        try:
+            if USING_POSTGRES:
+                cursor.execute('SELECT * FROM users WHERE username = %s OR email = %s',
+                               (identifier, identifier))
+            else:
+                cursor.execute('SELECT * FROM users WHERE username = ? OR email = ?',
+                               (identifier, identifier))
             user = cursor.fetchone()
+            if not user or not self.verify_password(password, user['password']):
+                return None
 
-            if user:
+            if self.is_legacy_password_hash(user['password']):
+                upgraded_hash = self.hash_password(password)
+                if USING_POSTGRES:
+                    cursor.execute('UPDATE users SET password = %s WHERE id = %s', (upgraded_hash, user['id']))
+                else:
+                    cursor.execute('UPDATE users SET password = ? WHERE id = ?', (upgraded_hash, user['id']))
+
+            if USING_POSTGRES:
                 cursor.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = %s', (user['id'],))
-                conn.commit()
-                cursor.close()
-                conn.close()
-                return dict(user)
-        else:
-            cursor.execute('SELECT * FROM users WHERE (username = ? OR email = ?) AND password = ?',
-                           (identifier, identifier, hashed_pw))
-            user = cursor.fetchone()
-
-            if user:
+            else:
                 cursor.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
-                conn.commit()
-                cursor.close()
-                conn.close()
-                return dict(user)
-
-        cursor.close()
-        conn.close()
-        return None
+            conn.commit()
+            safe_user = dict(user)
+            safe_user.pop('password', None)
+            return safe_user
+        finally:
+            cursor.close()
+            conn.close()
 
     def get_user_by_id(self, user_id):
         conn, cursor = self.get_connection()
@@ -271,7 +290,11 @@ class DBManager:
         user = cursor.fetchone()
         cursor.close()
         conn.close()
-        return dict(user) if user else None
+        if not user:
+            return None
+        safe_user = dict(user)
+        safe_user.pop('password', None)
+        return safe_user
 
     def update_user_account(self, user_id, username, email, current_password=None, new_password=None):
         """Update account identity; password changes require the current password."""
@@ -286,7 +309,7 @@ class DBManager:
                 if not row:
                     return False, 'Account not found.'
                 stored_hash = row['password']
-                if self.hash_password(current_password or '') != stored_hash:
+                if not self.verify_password(current_password or '', stored_hash):
                     return False, 'Current password is incorrect; no changes were made.'
 
                 if USING_POSTGRES:
@@ -396,26 +419,29 @@ class DBManager:
     def add_trip(self, user_id, origin_name, origin_lat, origin_lon,
                  dest_name, dest_lat, dest_lon, transport, cost, time_min, co2, co2_saved, distance):
         conn, cursor = self.get_connection()
+        local_now = datetime.now(ZoneInfo('Asia/Dubai'))
 
         if USING_POSTGRES:
             cursor.execute('''
                 INSERT INTO trips (user_id, origin_name, origin_lat, origin_lon,
                                    destination_name, destination_lat, destination_lon,
-                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km,
+                                   trip_date, trip_time)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (user_id, origin_name, origin_lat, origin_lon, dest_name, dest_lat, dest_lon,
-                  transport, cost, time_min, co2, co2_saved, distance))
+                  transport, cost, time_min, co2, co2_saved, distance, local_now.date(), local_now.time().replace(tzinfo=None)))
         else:
             cursor.execute('''
                 INSERT INTO trips (user_id, origin_name, origin_lat, origin_lon,
                                    destination_name, destination_lat, destination_lon,
-                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   chosen_transport, chosen_cost, chosen_time, chosen_co2, co2_saved, distance_km,
+                                   trip_date, trip_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (user_id, origin_name, origin_lat, origin_lon, dest_name, dest_lat, dest_lon,
-                  transport, cost, time_min, co2, co2_saved, distance))
+                  transport, cost, time_min, co2, co2_saved, distance, local_now.date().isoformat(), local_now.time().isoformat(timespec='seconds')))
 
         # Update monthly stats
-        current_month = datetime.now().strftime('%Y-%m')
+        current_month = local_now.strftime('%Y-%m')
 
         if USING_POSTGRES:
             cursor.execute('SELECT * FROM monthly_stats WHERE user_id = %s AND month = %s', (user_id, current_month))
@@ -489,7 +515,7 @@ class DBManager:
 
     def get_monthly_stats(self, user_id, month=None):
         if not month:
-            month = datetime.now().strftime('%Y-%m')
+            month = datetime.now(ZoneInfo('Asia/Dubai')).strftime('%Y-%m')
         conn, cursor = self.get_connection()
         if USING_POSTGRES:
             cursor.execute('SELECT * FROM monthly_stats WHERE user_id = %s AND month = %s', (user_id, month))

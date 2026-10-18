@@ -9,6 +9,7 @@
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/feature-enhancements.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -66,6 +67,48 @@
                         <span class="stat-value">{{ stats.green_points or 0 }}</span>
                     </div>
                 </div>
+
+                <section class="gamification-panel reveal-on-scroll" aria-labelledby="journey-level-title">
+                    <div class="gamification-top">
+                        <div>
+                            <span class="page-kicker">CONSISTENCY · IMPACT · PROGRESS</span>
+                            <h2 id="journey-level-title">Your journey level</h2>
+                            <p>Earn XP when you record a trip. A day with a saved journey extends your streak; completed weekly challenges unlock bonus XP.</p>
+                        </div>
+                        <div class="level-badge"><strong>{{ gamification.level }}</strong><span>{{ gamification.level_title }}</span></div>
+                    </div>
+                    <div class="xp-track" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ gamification.level_progress }}">
+                        <span style="width: {{ gamification.level_progress }}%"></span>
+                    </div>
+                    <p>{{ gamification.level_progress }} / 100 XP toward the next level · {{ gamification.points_to_next_level }} XP to go.</p>
+                    <div class="gamification-meta">
+                        <span><strong>{{ gamification.total_points }}</strong> total XP</span>
+                        <span><strong>{{ gamification.current_streak }}</strong>-day active streak</span>
+                        <span><strong>{{ gamification.best_streak }}</strong>-day best streak</span>
+                    </div>
+
+                    <div class="challenge-heading">
+                        <h3>This week’s challenges</h3>
+                        <span>Resets every Monday · UAE time</span>
+                    </div>
+                    <div class="challenge-grid">
+                        {% for challenge in weekly_challenges %}
+                        <article class="challenge-item {{ 'is-complete' if challenge.is_complete else '' }}">
+                            <h4>{{ challenge.title }}</h4>
+                            <p>{{ challenge.description }}</p>
+                            <div class="challenge-progress" role="progressbar" aria-label="{{ challenge.title }} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ challenge.progress_percent }}">
+                                <span style="width: {{ challenge.progress_percent }}%"></span>
+                            </div>
+                            <div class="challenge-foot">
+                                <span>{{ challenge.progress }} / {{ challenge.target }}</span>
+                                <span class="challenge-reward">{{ '+' if challenge.is_complete else '' }}{{ challenge.reward_xp }} XP</span>
+                            </div>
+                            {% if challenge.is_complete and challenge.rewarded %}<p class="challenge-note">Complete · reward added to your XP.</p>{% endif %}
+                        </article>
+                        {% endfor %}
+                    </div>
+                    <p class="challenge-note">Challenges and streaks use trips saved in your history. Turning off trip-history saving pauses new progress.</p>
+                </section>
 
                 <div class="card">
                     <h2>Recent Activity</h2>
