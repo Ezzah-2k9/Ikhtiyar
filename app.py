@@ -278,7 +278,7 @@ def calculate_route():
                     'distance': dist_driving,
                     'time': driving['duration_min'],
                     'cost': CostCalculator.calculate_driving_cost(dist_driving, road_geometry),
-                    'geometry': [] if route_is_estimate else road_geometry,
+                    'geometry': road_geometry,
                     'is_estimate': route_is_estimate,
                 })
                 if result['is_estimate']:
@@ -289,7 +289,7 @@ def calculate_route():
                     'distance': dist_driving,
                     'time': driving['duration_min'],
                     'cost': CostCalculator.calculate_taxi_cost(dist_driving),
-                    'geometry': [] if route_is_estimate else driving.get('geometry', []),
+                    'geometry': driving.get('geometry', []),
                     'is_estimate': route_is_estimate,
                 })
                 result['note'] = 'Taxi fare is estimated and is not a live ride quote.'
@@ -318,7 +318,7 @@ def calculate_route():
                     'distance': walking['distance_km'],
                     'time': walking['duration_min'],
                     'cost': 0,
-                    'geometry': [] if walking.get('is_estimate', True) else walking.get('geometry', []),
+                    'geometry': walking.get('geometry', []),
                     'is_estimate': bool(walking.get('is_estimate', True)),
                 })
                 if result['is_estimate']:
@@ -328,7 +328,7 @@ def calculate_route():
                     'distance': cycling['distance_km'],
                     'time': cycling['duration_min'],
                     'cost': 0,
-                    'geometry': [] if cycling.get('is_estimate', True) else cycling.get('geometry', []),
+                    'geometry': cycling.get('geometry', []),
                     'is_estimate': bool(cycling.get('is_estimate', True)),
                 })
                 if result['is_estimate']:
@@ -407,8 +407,8 @@ def calculate_route():
 
         if routes.get('is_estimate', True):
             route_estimate_note = (
-                f"Road source: {routes.get('provider', 'built-in estimate')}. One or more distance or time values are estimates; "
-                "add valid routing keys to Render for provider-based routes. "
+                f"Road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is an approximate direction, not a street-level route. "
+                "Add a valid routing key to Render for provider-based route geometry. "
             )
         else:
             route_estimate_note = f"Road source: {routes.get('provider', 'routing provider')}. Public-transit fares and times remain estimates. "

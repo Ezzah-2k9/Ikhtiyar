@@ -599,6 +599,36 @@
             activeLayers = [];
         }
 
+        function getRouteDisplayGeometry(route, origin, destination) {
+            const supplied = Array.isArray(route?.geometry)
+                ? route.geometry
+                    .filter(point => Array.isArray(point) && point.length >= 2
+                        && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
+                    .map(point => [Number(point[0]), Number(point[1])])
+                : [];
+            if (supplied.length >= 2) {
+                return { points: supplied, estimated: Boolean(route.is_estimate) };
+            }
+            return {
+                points: [[Number(origin.lat), Number(origin.lon)], [Number(destination.lat), Number(destination.lon)]],
+                estimated: true
+            };
+        }
+
+        function addRouteLine(targetMap, route, origin, destination) {
+            const display = getRouteDisplayGeometry(route, origin, destination);
+            const line = L.polyline(display.points, {
+                color: getTransportColor(route.mode),
+                weight: display.estimated ? 4 : 6,
+                opacity: 0.9,
+                dashArray: display.estimated ? '8 10' : undefined
+            }).addTo(targetMap);
+            line.bindTooltip(display.estimated
+                ? 'Approximate direction only — not a street-level route.'
+                : `${route.mode.toUpperCase()} route from a routing provider.`);
+            return line;
+        }
+
         const originInput = document.getElementById('origin');
         const destinationInput = document.getElementById('destination');
         const resultsGrid = document.getElementById('results-grid');
@@ -661,25 +691,17 @@
             const destinationMarker = L.marker([data.destination.lat, data.destination.lon], { icon: destinationIcon }).addTo(map);
             activeLayers.push(originMarker, destinationMarker);
 
-            // Draw only provider-supplied route geometry; never send endpoints to a browser-side demo router.
-            const drivingRoute = data.results.find(r => r.mode === 'driving');
-            if (drivingRoute && drivingRoute.geometry && drivingRoute.geometry.length > 2) {
-                const drivingPolyline = L.polyline(drivingRoute.geometry, {
-                    color: '#1A4F4D',
-                    weight: 6,
-                    opacity: 0.9
-                }).addTo(map);
-                const drivingGlow = L.polyline(drivingRoute.geometry, {
-                    color: '#2D8A85',
-                    weight: 10,
-                    opacity: 0.25
-                }).addTo(map);
-                // Ensure glow is under the main polyline
-                drivingGlow.bringToBack();
-                activeLayers.push(drivingPolyline, drivingGlow);
-            }
+            // Prefer the recommended option. Without provider geometry, show a dashed straight-line estimate.
+            const displayedRoute = data.results.find(r => r.is_recommended)
+                || data.results.find(r => r.mode === 'driving');
+            const routeLine = displayedRoute
+                ? addRouteLine(map, displayedRoute, data.origin, data.destination)
+                : null;
+            if (routeLine) activeLayers.push(routeLine);
 
-            map.fitBounds(L.featureGroup([originMarker, destinationMarker]).getBounds().pad(0.25));
+            const boundsLayers = [originMarker, destinationMarker];
+            if (routeLine) boundsLayers.push(routeLine);
+            map.fitBounds(L.featureGroup(boundsLayers).getBounds().pad(0.25));
 
             // Render sorted cards
             const sorted = [...data.results].sort(
@@ -817,16 +839,8 @@
             const originMarker = L.marker([origin.lat, origin.lon], { icon: originIcon }).addTo(detailMap);
             const destinationMarker = L.marker([destination.lat, destination.lon], { icon: destinationIcon }).addTo(detailMap);
 
-            if (transport.geometry && transport.geometry.length > 2) {
-                const polyline = L.polyline(transport.geometry, {
-                    color: getTransportColor(transport.mode),
-                    weight: 5,
-                    opacity: 0.9
-                }).addTo(detailMap);
-                detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker, polyline]).getBounds().pad(0.2));
-            } else {
-                detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker]).getBounds().pad(0.2));
-            }
+            const routeLine = addRouteLine(detailMap, transport, origin, destination);
+            detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker, routeLine]).getBounds().pad(0.2));
         }
 
         function closeModal() {
