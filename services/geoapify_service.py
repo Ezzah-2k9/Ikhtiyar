@@ -41,7 +41,7 @@ class GeoapifyService:
                     'returnElevation': 'false'
                 }
                 
-                response = requests.get(url, params=params, timeout=10)
+                response = requests.get(url, params=params, timeout=5)
                 print(f"Geoapify response status: {response.status_code}")
                 
                 if response.status_code != 200:

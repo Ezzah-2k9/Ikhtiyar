@@ -26,12 +26,12 @@
       const response = await fetch(`/api/traffic/${tile.z}/${tile.x}/${tile.y}.png`, { cache: 'no-store' });
       const payload = await response.json().catch(() => ({}));
       const reason = String(payload.error || 'Traffic tile request failed.');
-      if (/HTTP 401|HTTP 403/.test(reason)) {
-        trafficStatus.textContent = 'TomTom rejected the key or traffic-tile access. Check the key and API product access in Render.';
-      } else if (/HTTP 429/.test(reason)) {
+      if (response.status === 401 || response.status === 403) {
+        trafficStatus.textContent = 'TomTom rejected the key or Traffic Flow access. Check the key’s product access in Render.';
+      } else if (response.status === 429) {
         trafficStatus.textContent = 'TomTom traffic quota or rate limit reached. Check your TomTom plan and usage.';
-      } else if (/HTTP 5\d\d/.test(reason) || /temporarily unavailable/i.test(reason)) {
-        trafficStatus.textContent = 'TomTom traffic is temporarily unavailable. Try again later.';
+      } else if (response.status >= 500) {
+        trafficStatus.textContent = 'Traffic service is temporarily unavailable. Check the Render and TomTom logs.';
       } else {
         trafficStatus.textContent = `Traffic overlay failed: ${reason} Check the latest Render service logs for details.`;
       }

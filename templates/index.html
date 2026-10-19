@@ -457,12 +457,12 @@
                         <section class="monthly-goal-peek" aria-labelledby="calculator-monthly-goal-title">
                             <div class="monthly-goal-peek-heading">
                                 <span class="goal-emblem" aria-hidden="true"><i class="fa-solid fa-leaf"></i></span>
-                                <div><span class="page-kicker">YOUR MONTHLY TARGET</span><h4 id="calculator-monthly-goal-title">CO₂ savings</h4></div>
+                                <div><span class="page-kicker">YOUR MONTHLY TARGET</span><h4 id="calculator-monthly-goal-title">{{ monthly_goal.goal_label if monthly_goal else 'Travel progress' }}</h4></div>
                             </div>
                             {% if monthly_goal %}
                             <div class="monthly-goal-peek-progress"><span style="width: {{ monthly_goal.progress_percent }}%"></span></div>
-                            <p><strong>{{ "%.2f"|format(monthly_goal.saved_co2_kg) }} / {{ "%.2f"|format(monthly_goal.target_co2_kg) }} kg</strong> saved this month</p>
-                            <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.remaining_co2_kg <= 0 %}Target reached. Keep recording your journeys.{% else %}{{ "%.2f"|format(monthly_goal.remaining_co2_kg) }} kg to go. A fast trip is fine—greener trips later in the month can make up the difference.{% endif %}</small>
+                            <p><strong>{{ "%.2f"|format(monthly_goal.current_value) }} / {{ "%.2f"|format(monthly_goal.target_value) }} {{ monthly_goal.goal_unit }}</strong> this month</p>
+                            <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.reached %}Target reached. Keep recording your journeys.{% else %}All saved trips count toward the monthly total. The recommendation uses this goal, while every transport choice stays available.{% endif %}</small>
                             {% else %}
                             <p>No target set for this month.</p>
                             <small>Set it once in Preferences; this page will keep showing your progress.</small>
@@ -642,6 +642,20 @@
         const resultsSidebar = document.getElementById('results-sidebar');
         const loading = document.getElementById('loading');
 
+        async function readApiResponse(response) {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                throw new Error(response.status >= 500
+                    ? `Ikhtiyar is temporarily unavailable (HTTP ${response.status}). Please retry shortly.`
+                    : `The server returned an unexpected response (HTTP ${response.status}).`);
+            }
+            const data = await response.json();
+            if (!response.ok || data.error) {
+                throw new Error(data.error || `Request failed (HTTP ${response.status}).`);
+            }
+            return data;
+        }
+
         async function calculateRoute() {
             const origin = originInput.value.trim();
             const destination = destinationInput.value.trim();
@@ -670,8 +684,7 @@
                     body: JSON.stringify(routeRequest)
                 });
 
-                const data = await res.json();
-                if (data.error) throw new Error(data.error);
+                const data = await readApiResponse(res);
 
                 renderResults(data);
             } catch (err) {
@@ -785,7 +798,7 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const data = await readApiResponse(response);
                 if (data.success) {
                     if (data.gamification) window.dispatchEvent(new CustomEvent('ikhtiyar:reward', { detail: data.gamification }));
                     if (data.saved_to_history === false) {
@@ -800,7 +813,7 @@
                 }
             } catch (error) {
                 console.error('Error recording trip:', error);
-                alert('Failed to record trip. Please check your connection and try again.');
+                alert(error.message || 'Failed to record trip. Please check your connection and try again.');
             }
         }
 

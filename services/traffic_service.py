@@ -26,8 +26,15 @@ class TrafficService:
                 timeout=8,
             )
             if response.status_code != 200:
-                print(f"TomTom traffic provider returned HTTP {response.status_code}.")
-                return None, f"Traffic provider returned HTTP {response.status_code}.", 502
+                upstream_status = response.status_code
+                print(f"TomTom traffic provider returned HTTP {upstream_status}.")
+                if upstream_status in (401, 403):
+                    return None, f"TomTom rejected the key or Traffic Flow access (HTTP {upstream_status}).", upstream_status
+                if upstream_status == 429:
+                    return None, "TomTom traffic quota or rate limit reached (HTTP 429).", 429
+                if upstream_status == 400:
+                    return None, "TomTom rejected the traffic tile request (HTTP 400).", 502
+                return None, "TomTom traffic is temporarily unavailable.", 502
             content_type = response.headers.get("Content-Type", "")
             if not content_type.startswith("image/png"):
                 print("TomTom traffic provider returned a non-PNG tile response.")

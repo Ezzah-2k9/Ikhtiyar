@@ -29,10 +29,16 @@ class TomTomService:
         for mode_key, travel_mode in modes.items():
             try:
                 # TomTom Routing API
-                url = f"https://api.tomtom.com/routing/1/calculateRoute/{travel_mode}/{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
+                # TomTom v1 route locations are latitude,longitude pairs in
+                # the path. travelMode is a query parameter, not a URL segment.
+                url = (
+                    "https://api.tomtom.com/routing/1/calculateRoute/"
+                    f"{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
+                )
                 
                 params = {
                     'key': api_key,
+                    'travelMode': travel_mode,
                     'traffic': 'true',
                     'routeRepresentation': 'polyline',
                     'computeBestOrder': 'true',
@@ -41,7 +47,7 @@ class TomTomService:
                     'sectionType': 'traffic'
                 }
                 
-                response = requests.get(url, params=params, timeout=10)
+                response = requests.get(url, params=params, timeout=5)
                 response.raise_for_status()
                 data = response.json()
                 

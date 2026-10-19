@@ -9,6 +9,10 @@ class Config:
     
     # Database configuration - Support both SQLite (dev) and PostgreSQL (prod)
     DATABASE_URL = os.environ.get('DATABASE_URL')
+    # Render has historically exposed PostgreSQL URLs with either scheme.
+    # psycopg2 and DBManager require the canonical postgresql:// prefix.
+    if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = 'postgresql://' + DATABASE_URL[len('postgres://'):]
     if DATABASE_URL:
         # Production PostgreSQL
         DB_PATH = DATABASE_URL

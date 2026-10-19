@@ -34,7 +34,7 @@ class OpenRouteService:
                 'format': 'geojson'
             }
             
-            response = requests.post(url, headers=headers, json=body, timeout=10)
+            response = requests.post(url, headers=headers, json=body, timeout=5)
             response.raise_for_status()
             
             data = response.json()
