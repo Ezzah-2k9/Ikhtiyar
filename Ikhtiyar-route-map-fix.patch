@@ -1,0 +1,147 @@
+diff --git a/app.py b/app.py
+index f2ea15d..985c650 100644
+--- a/app.py
++++ b/app.py
+@@ -278,7 +278,7 @@ def calculate_route():
+                     'distance': dist_driving,
+                     'time': driving['duration_min'],
+                     'cost': CostCalculator.calculate_driving_cost(dist_driving, road_geometry),
+-                    'geometry': [] if route_is_estimate else road_geometry,
++                    'geometry': road_geometry,
+                     'is_estimate': route_is_estimate,
+                 })
+                 if result['is_estimate']:
+@@ -289,7 +289,7 @@ def calculate_route():
+                     'distance': dist_driving,
+                     'time': driving['duration_min'],
+                     'cost': CostCalculator.calculate_taxi_cost(dist_driving),
+-                    'geometry': [] if route_is_estimate else driving.get('geometry', []),
++                    'geometry': driving.get('geometry', []),
+                     'is_estimate': route_is_estimate,
+                 })
+                 result['note'] = 'Taxi fare is estimated and is not a live ride quote.'
+@@ -318,7 +318,7 @@ def calculate_route():
+                     'distance': walking['distance_km'],
+                     'time': walking['duration_min'],
+                     'cost': 0,
+-                    'geometry': [] if walking.get('is_estimate', True) else walking.get('geometry', []),
++                    'geometry': walking.get('geometry', []),
+                     'is_estimate': bool(walking.get('is_estimate', True)),
+                 })
+                 if result['is_estimate']:
+@@ -328,7 +328,7 @@ def calculate_route():
+                     'distance': cycling['distance_km'],
+                     'time': cycling['duration_min'],
+                     'cost': 0,
+-                    'geometry': [] if cycling.get('is_estimate', True) else cycling.get('geometry', []),
++                    'geometry': cycling.get('geometry', []),
+                     'is_estimate': bool(cycling.get('is_estimate', True)),
+                 })
+                 if result['is_estimate']:
+@@ -407,8 +407,8 @@ def calculate_route():
+ 
+         if routes.get('is_estimate', True):
+             route_estimate_note = (
+-                f"Road source: {routes.get('provider', 'built-in estimate')}. One or more distance or time values are estimates; "
+-                "add valid routing keys to Render for provider-based routes. "
++                f"Road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is an approximate direction, not a street-level route. "
++                "Add a valid routing key to Render for provider-based route geometry. "
+             )
+         else:
+             route_estimate_note = f"Road source: {routes.get('provider', 'routing provider')}. Public-transit fares and times remain estimates. "
+diff --git a/templates/index.html b/templates/index.html
+index 7a26802..95a7be6 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -599,6 +599,36 @@
+             activeLayers = [];
+         }
+ 
++        function getRouteDisplayGeometry(route, origin, destination) {
++            const supplied = Array.isArray(route?.geometry)
++                ? route.geometry
++                    .filter(point => Array.isArray(point) && point.length >= 2
++                        && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
++                    .map(point => [Number(point[0]), Number(point[1])])
++                : [];
++            if (supplied.length >= 2) {
++                return { points: supplied, estimated: Boolean(route.is_estimate) };
++            }
++            return {
++                points: [[Number(origin.lat), Number(origin.lon)], [Number(destination.lat), Number(destination.lon)]],
++                estimated: true
++            };
++        }
++
++        function addRouteLine(targetMap, route, origin, destination) {
++            const display = getRouteDisplayGeometry(route, origin, destination);
++            const line = L.polyline(display.points, {
++                color: getTransportColor(route.mode),
++                weight: display.estimated ? 4 : 6,
++                opacity: 0.9,
++                dashArray: display.estimated ? '8 10' : undefined
++            }).addTo(targetMap);
++            line.bindTooltip(display.estimated
++                ? 'Approximate direction only — not a street-level route.'
++                : `${route.mode.toUpperCase()} route from a routing provider.`);
++            return line;
++        }
++
+         const originInput = document.getElementById('origin');
+         const destinationInput = document.getElementById('destination');
+         const resultsGrid = document.getElementById('results-grid');
+@@ -661,25 +691,17 @@
+             const destinationMarker = L.marker([data.destination.lat, data.destination.lon], { icon: destinationIcon }).addTo(map);
+             activeLayers.push(originMarker, destinationMarker);
+ 
+-            // Draw only provider-supplied route geometry; never send endpoints to a browser-side demo router.
+-            const drivingRoute = data.results.find(r => r.mode === 'driving');
+-            if (drivingRoute && drivingRoute.geometry && drivingRoute.geometry.length > 2) {
+-                const drivingPolyline = L.polyline(drivingRoute.geometry, {
+-                    color: '#1A4F4D',
+-                    weight: 6,
+-                    opacity: 0.9
+-                }).addTo(map);
+-                const drivingGlow = L.polyline(drivingRoute.geometry, {
+-                    color: '#2D8A85',
+-                    weight: 10,
+-                    opacity: 0.25
+-                }).addTo(map);
+-                // Ensure glow is under the main polyline
+-                drivingGlow.bringToBack();
+-                activeLayers.push(drivingPolyline, drivingGlow);
+-            }
++            // Prefer the recommended option. Without provider geometry, show a dashed straight-line estimate.
++            const displayedRoute = data.results.find(r => r.is_recommended)
++                || data.results.find(r => r.mode === 'driving');
++            const routeLine = displayedRoute
++                ? addRouteLine(map, displayedRoute, data.origin, data.destination)
++                : null;
++            if (routeLine) activeLayers.push(routeLine);
+ 
+-            map.fitBounds(L.featureGroup([originMarker, destinationMarker]).getBounds().pad(0.25));
++            const boundsLayers = [originMarker, destinationMarker];
++            if (routeLine) boundsLayers.push(routeLine);
++            map.fitBounds(L.featureGroup(boundsLayers).getBounds().pad(0.25));
+ 
+             // Render sorted cards
+             const sorted = [...data.results].sort(
+@@ -808,16 +830,8 @@
+             const originMarker = L.marker([origin.lat, origin.lon], { icon: originIcon }).addTo(detailMap);
+             const destinationMarker = L.marker([destination.lat, destination.lon], { icon: destinationIcon }).addTo(detailMap);
+ 
+-            if (transport.geometry && transport.geometry.length > 2) {
+-                const polyline = L.polyline(transport.geometry, {
+-                    color: getTransportColor(transport.mode),
+-                    weight: 5,
+-                    opacity: 0.9
+-                }).addTo(detailMap);
+-                detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker, polyline]).getBounds().pad(0.2));
+-            } else {
+-                detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker]).getBounds().pad(0.2));
+-            }
++            const routeLine = addRouteLine(detailMap, transport, origin, destination);
++            detailMap.fitBounds(L.featureGroup([originMarker, destinationMarker, routeLine]).getBounds().pad(0.2));
+         }
+ 
+         function closeModal() {

@@ -1,0 +1,153 @@
+--- a/services/route_service.py
++++ b/services/route_service.py
+@@ -1,6 +1,11 @@
+-"""Route-provider cascade and distance fallback helpers."""
++"""Route-provider cascade with transparent estimate and public OSRM fallback."""
+ 
+ import math
++import threading
++import time
++
++import requests
++
+ from config import Config
+ from services.openrouteservice_service import OpenRouteService
+ from services.geoapify_service import GeoapifyService
+@@ -8,6 +13,11 @@
+ 
+ 
+ class RouteService:
++    OSRM_DEMO_URL = "https://router.project-osrm.org/route/v1/driving"
++    OSRM_MIN_INTERVAL_SECONDS = 1.05
++    _osrm_request_lock = threading.Lock()
++    _last_osrm_request_started = 0.0
++
+     @staticmethod
+     def _decorate(result, provider_name):
+         if not result:
+@@ -26,8 +36,51 @@
+         return result
+ 
+     @staticmethod
++    def _get_osrm_driving_route(origin_lat, origin_lon, dest_lat, dest_lon):
++        """Fetch one street-following driving route from OSRM's public demo service.
++
++        OSRM's public demo is for reasonable non-commercial use and asks clients
++        not to exceed one request per second. This app makes at most one request
++        for a route calculation and enforces a process-wide minimum interval.
++        It has no uptime or latency guarantee, so callers must keep an estimate
++        fallback available.
++        """
++        with RouteService._osrm_request_lock:
++            elapsed = time.monotonic() - RouteService._last_osrm_request_started
++            wait_for = RouteService.OSRM_MIN_INTERVAL_SECONDS - elapsed
++            if wait_for > 0:
++                time.sleep(wait_for)
++            RouteService._last_osrm_request_started = time.monotonic()
++            response = requests.get(
++                f"{RouteService.OSRM_DEMO_URL}/"
++                f"{origin_lon},{origin_lat};{dest_lon},{dest_lat}",
++                params={"overview": "full", "geometries": "geojson", "steps": "false"},
++                headers={"User-Agent": "Ikhtiyar mobility comparison app/2.0"},
++                timeout=10,
++            )
++            response.raise_for_status()
++            payload = response.json()
++
++        routes = payload.get("routes") or []
++        if payload.get("code") != "Ok" or not routes:
++            return None
++        route = routes[0]
++        coordinates = (route.get("geometry") or {}).get("coordinates") or []
++        if len(coordinates) < 2:
++            return None
++        # OSRM GeoJSON is [longitude, latitude]; Leaflet uses [latitude, longitude].
++        geometry = [[float(lat), float(lon)] for lon, lat in coordinates]
++        return {
++            "distance_km": round(float(route["distance"]) / 1000, 2),
++            "duration_min": round(float(route["duration"]) / 60, 0),
++            "geometry": geometry,
++            "provider": "OSRM public demo",
++            "is_estimate": False,
++        }
++
++    @staticmethod
+     def get_route(origin_lat, origin_lon, dest_lat, dest_lon):
+-        """Try configured providers in order, never mistaking an internal estimate for live data."""
++        """Try configured providers, then public OSRM for driving, then estimates."""
+         straight_dist = RouteService.haversine(origin_lat, origin_lon, dest_lat, dest_lon)
+         if straight_dist < 0.01:
+             same_point = {
+@@ -50,13 +103,23 @@
+             if not configured:
+                 continue
+             try:
+-                result = RouteService._decorate(request_routes(), provider_name)
++                result = RouteService._decorate(
++                    request_routes(), provider_name
++                )
+                 driving = result.get("driving", {}) if result else {}
+                 if driving and not driving.get("is_estimate", True):
+                     return result
+                 print(f"{provider_name} did not return a live driving route; trying the next provider.")
+             except Exception as error:
+                 print(f"{provider_name} route provider failed ({type(error).__name__}).")
++
++        osrm_driving = None
++        try:
++            osrm_driving = RouteService._get_osrm_driving_route(
++                origin_lat, origin_lon, dest_lat, dest_lon
++            )
++        except Exception as error:
++            print(f"OSRM public demo route failed ({type(error).__name__}).")
+ 
+         factors = {"driving": 1.4, "walking": 1.1, "cycling": 1.2}
+         speeds = {"driving": 40, "walking": 5, "cycling": 15}
+@@ -70,7 +133,13 @@
+                 "provider": "built-in estimate",
+                 "is_estimate": True,
+             }
+-        fallback.update({"provider": "built-in estimate", "is_estimate": True})
++
++        if osrm_driving:
++            fallback["driving"] = osrm_driving
++            fallback["provider"] = "OSRM public demo (driving); walking and cycling estimates"
++        else:
++            fallback["provider"] = "built-in estimate"
++        fallback["is_estimate"] = True
+         return fallback
+ 
+     @staticmethod
+--- a/app.py
++++ b/app.py
+@@ -405,13 +405,13 @@
+                 'driving_co2_baseline': float(driving_co2),
+             }, salt='ikhtiyar-route-quote')
+ 
+-        if routes.get('is_estimate', True):
++        if driving.get('is_estimate', True):
+             route_estimate_note = (
+-                f"Road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is an approximate direction, not a street-level route. "
+-                "Add a valid routing key to Render for provider-based routes. "
++                f"Driving road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is only an approximate direction, not a street-level route. "
++                "A configured routing provider may improve route accuracy. "
+             )
+         else:
+-            route_estimate_note = f"Road source: {routes.get('provider', 'routing provider')}. Public-transit fares and times remain estimates. "
++            route_estimate_note = f"Driving road source: {driving.get('provider', routes.get('provider', 'routing provider'))}; the solid map line follows mapped streets. Walking, cycling, and public-transit values may still be estimates. "
+         route_estimate_note += (
+             f"Metro check: {metro_info.get('reason', 'station coverage could not be confirmed')} "
+             "Metro coverage uses mapped Dubai stations, not a live itinerary or timetable."
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -692,7 +692,9 @@
+             activeLayers.push(originMarker, destinationMarker);
+ 
+             // Prefer the recommended option. Without provider geometry, show a dashed straight-line estimate.
+-            const displayedRoute = data.results.find(r => r.is_recommended)
++            const displayedRoute = data.results.find(r => r.is_recommended && !r.is_estimate && r.geometry?.length > 2)
++                || data.results.find(r => r.mode === 'driving' && !r.is_estimate && r.geometry?.length > 2)
++                || data.results.find(r => r.is_recommended)
+                 || data.results.find(r => r.mode === 'driving');
+             const routeLine = displayedRoute
+                 ? addRouteLine(map, displayedRoute, data.origin, data.destination)
