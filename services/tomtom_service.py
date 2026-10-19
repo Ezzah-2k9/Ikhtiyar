@@ -29,7 +29,7 @@ class TomTomService:
         for mode_key, travel_mode in modes.items():
             try:
                 # TomTom Routing API
-                url = f"https://api.tomtom.com/routing/1/calculateRoute/{travel_mode}/{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
+                url = f"https://api.tomtom.com/routing/1/calculateRoute/{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
                 
                 params = {
                     'key': api_key,
@@ -37,6 +37,7 @@ class TomTomService:
                     'routeRepresentation': 'polyline',
                     'computeBestOrder': 'true',
                     'routeType': 'fastest',
+                    'travelMode': travel_mode,
                     'avoid': 'unpavedRoads',
                     'sectionType': 'traffic'
                 }
@@ -62,6 +63,9 @@ class TomTomService:
                                 for point in leg['points']:
                                     # TomTom provides lat,lon directly
                                     geometry.append([point['latitude'], point['longitude']])
+
+                    if len(geometry) < 2:
+                        raise Exception("TomTom returned no usable route geometry")
                     
                     res[mode_key] = {
                         'distance_km': round(dist_km, 2),
@@ -74,7 +78,9 @@ class TomTomService:
                     raise Exception("No route found in TomTom response")
                     
             except Exception as e:
-                print(f"TomTom API ({mode_key}) failed ({type(e).__name__}); using estimate.")
+                status_code = getattr(getattr(e, 'response', None), 'status_code', None)
+                failure = f"HTTP {status_code}" if status_code else type(e).__name__
+                print(f"TomTom API ({mode_key}) failed ({failure}); using estimate.")
                 # Fallback: Haversine distance * factor
                 straight_dist = TomTomService.haversine(origin_lat, origin_lon, dest_lat, dest_lon)
                 

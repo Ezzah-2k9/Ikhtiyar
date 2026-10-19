@@ -656,6 +656,23 @@
         const resultsSidebar = document.getElementById('results-sidebar');
         const loading = document.getElementById('loading');
 
+        async function readApiJson(response, actionName) {
+            const contentType = response.headers.get('content-type') || '';
+            const responseText = await response.text();
+            let payload = null;
+            if (contentType.includes('application/json') && responseText) {
+                try { payload = JSON.parse(responseText); } catch (_error) { /* handled below */ }
+            }
+            if (!response.ok) {
+                if (payload && typeof payload.error === 'string') throw new Error(payload.error);
+                throw new Error(`${actionName} failed with HTTP ${response.status}. The server returned a non-JSON error page. Check the Render service logs at this time; the app may have timed out or become unavailable.`);
+            }
+            if (!payload || typeof payload !== 'object') {
+                throw new Error(`${actionName} returned an invalid response. Please retry; if it continues, check the Render service logs.`);
+            }
+            return payload;
+        }
+
         async function calculateRoute() {
             const origin = originInput.value.trim();
             const destination = destinationInput.value.trim();
@@ -684,7 +701,7 @@
                     body: JSON.stringify(routeRequest)
                 });
 
-                const data = await res.json();
+                const data = await readApiJson(res, 'Route comparison');
                 if (data.error) throw new Error(data.error);
 
                 renderResults(data);
@@ -814,7 +831,7 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await response.json();
+                const data = await readApiJson(response, 'Saving this trip');
                 if (data.success) {
                     if (data.gamification) window.dispatchEvent(new CustomEvent('ikhtiyar:reward', { detail: data.gamification }));
                     if (data.saved_to_history === false) {

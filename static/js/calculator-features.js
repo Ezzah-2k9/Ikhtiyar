@@ -25,7 +25,14 @@
     }
     try {
       const response = await fetch(`/api/traffic/${tile.z}/${tile.x}/${tile.y}.png`, { cache: 'no-store' });
-      const payload = await response.json().catch(() => ({}));
+      const contentType = response.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json')
+        ? await response.json().catch(() => null)
+        : null;
+      if (!payload) {
+        trafficStatus.textContent = `The app host returned HTTP ${response.status}, not a traffic diagnostic. Check Render service logs; this is not a TomTom key-status response.`;
+        return;
+      }
       const reason = String(payload.error || 'Traffic tile request failed.');
       if (/HTTP 401/.test(reason)) {
         trafficStatus.textContent = 'TomTom did not accept TOMTOM_KEY. Verify the key in Render, save it, then redeploy.';
