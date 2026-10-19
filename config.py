@@ -24,6 +24,7 @@ class Config:
     LOCATIONIQ_KEY = os.environ.get('LOCATIONIQ_KEY', '')
     ORS_KEY = os.environ.get('ORS_KEY', '')
     TOMTOM_KEY = os.environ.get('TOMTOM_KEY', '')
+    HERE_API_KEY = os.environ.get('HERE_API_KEY', '')
     GRAPHHOPPER_KEY = os.environ.get('GRAPHHOPPER_KEY', '')
     GEOAPIFY_KEY = os.environ.get('GEOAPIFY_KEY', '')
     OPENWEATHER_KEY = os.environ.get('OPENWEATHER_KEY', '')

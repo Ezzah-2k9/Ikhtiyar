@@ -5,6 +5,50 @@ from config import Config
 
 class TomTomService:
     @staticmethod
+    def get_driving_route(origin_lat, origin_lon, dest_lat, dest_lon):
+        """Request one TomTom car route and return its street-level polyline."""
+        api_key = str(Config.TOMTOM_KEY or "").strip()
+        if not api_key:
+            raise ValueError("TomTom key is not configured")
+        url = (
+            "https://api.tomtom.com/routing/1/calculateRoute/"
+            f"{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
+        )
+        response = requests.get(
+            url,
+            params={
+                "key": api_key,
+                "travelMode": "car",
+                "routeType": "fastest",
+                "routeRepresentation": "polyline",
+            },
+            timeout=(3, 5),
+        )
+        response.raise_for_status()
+        data = response.json()
+        routes = data.get("routes") or []
+        if not routes:
+            raise ValueError("TomTom returned no route")
+        route = routes[0]
+        summary = route.get("summary") or {}
+        geometry = []
+        for leg in route.get("legs") or []:
+            for point in leg.get("points") or []:
+                try:
+                    geometry.append([
+                        float(point["latitude"]), float(point["longitude"])
+                    ])
+                except (KeyError, TypeError, ValueError):
+                    continue
+        if len(geometry) < 2:
+            raise ValueError("TomTom returned no usable route geometry")
+        return {
+            "distance_km": float(summary["lengthInMeters"]) / 1000,
+            "duration_min": float(summary["travelTimeInSeconds"]) / 60,
+            "geometry": geometry,
+        }
+
+    @staticmethod
     def get_route(origin_lat, origin_lon, dest_lat, dest_lon):
         """
         Get route from TomTom API with accurate road following

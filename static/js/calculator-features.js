@@ -13,13 +13,15 @@
   let trafficLayer = null;
   let trafficVisible = false;
   let trafficDiagnosticStarted = false;
+  let trafficLoadFailed = false;
 
   async function explainTrafficFailure(event) {
     if (trafficDiagnosticStarted) return;
     trafficDiagnosticStarted = true;
+    trafficLoadFailed = true;
     const tile = event?.coords;
     if (!tile || !Number.isInteger(tile.z) || !Number.isInteger(tile.x) || !Number.isInteger(tile.y)) {
-      trafficStatus.textContent = 'Traffic tiles failed to load. Check Render logs for the TomTom response status.';
+      trafficStatus.textContent = 'Traffic tiles failed to load. Check the Render service logs for the upstream provider response.';
       return;
     }
     try {
@@ -27,11 +29,11 @@
       const payload = await response.json().catch(() => ({}));
       const reason = String(payload.error || 'Traffic tile request failed.');
       if (response.status === 401 || response.status === 403) {
-        trafficStatus.textContent = 'TomTom rejected the key or Traffic Flow access. Check the key’s product access in Render.';
+        trafficStatus.textContent = 'Traffic provider denied access. Check TomTom Traffic Flow access or HERE traffic-tile access in Render.';
       } else if (response.status === 429) {
-        trafficStatus.textContent = 'TomTom traffic quota or rate limit reached. Check your TomTom plan and usage.';
+        trafficStatus.textContent = 'Traffic quota or rate limit reached. Check the configured provider plan and usage.';
       } else if (response.status >= 500) {
-        trafficStatus.textContent = 'Traffic service is temporarily unavailable. Check the Render and TomTom logs.';
+        trafficStatus.textContent = 'Traffic service is temporarily unavailable. Check Render service and provider logs.';
       } else {
         trafficStatus.textContent = `Traffic overlay failed: ${reason} Check the latest Render service logs for details.`;
       }
@@ -50,34 +52,48 @@
 
   window.IkhtiyarFeatures = { showToast };
 
+  function setTrafficVisible(visible) {
+    if (!window.map || !trafficLayer || !trafficButton) return;
+    trafficVisible = visible;
+    if (trafficVisible) trafficLayer.addTo(window.map);
+    else window.map.removeLayer(trafficLayer);
+    trafficButton.setAttribute('aria-pressed', String(trafficVisible));
+    trafficButton.textContent = trafficVisible ? 'Hide traffic' : 'Show traffic';
+    trafficDiagnosticStarted = false;
+    if (trafficVisible) trafficLoadFailed = false;
+    trafficStatus.textContent = trafficVisible ? 'Loading live traffic tiles…' : 'Live traffic is off.';
+    if (trafficLegend) trafficLegend.hidden = !trafficVisible;
+  }
+
+  function createTrafficLayer() {
+    if (trafficLayer) return;
+    trafficLayer = L.tileLayer('/api/traffic/{z}/{x}/{y}.png', {
+      tileSize: 256,
+      opacity: 0.88,
+      maxNativeZoom: 20,
+      maxZoom: 22,
+      attribution: 'Traffic flow © TomTom / HERE',
+      crossOrigin: 'anonymous',
+    });
+    trafficLayer.on('tileerror', explainTrafficFailure);
+    trafficLayer.on('tileload', () => {
+      if (trafficVisible && !trafficLoadFailed) trafficStatus.textContent = 'Live traffic overlay loaded.';
+    });
+  }
+
   if (trafficButton && trafficStatus) {
     if (!trafficAvailable) {
       trafficButton.disabled = true;
       trafficButton.setAttribute('aria-pressed', 'false');
-      trafficStatus.textContent = 'Add TOMTOM_KEY in Render to enable live traffic.';
+      trafficStatus.textContent = 'Add TOMTOM_KEY or HERE_API_KEY in Render to enable live traffic.';
     } else {
-      trafficStatus.textContent = 'Live traffic is off.';
+      trafficStatus.textContent = 'Loading live traffic tiles…';
+      createTrafficLayer();
       trafficButton.addEventListener('click', () => {
-        if (!window.map) return;
-        if (!trafficLayer) {
-          trafficLayer = L.tileLayer('/api/traffic/{z}/{x}/{y}.png', {
-            tileSize: 256,
-            opacity: 0.88,
-            maxZoom: 22,
-            attribution: 'Traffic flow © TomTom',
-            crossOrigin: 'anonymous',
-          });
-          trafficLayer.on('tileerror', explainTrafficFailure);
-        }
-        trafficVisible = !trafficVisible;
-        if (trafficVisible) trafficLayer.addTo(window.map);
-        else window.map.removeLayer(trafficLayer);
-        trafficButton.setAttribute('aria-pressed', String(trafficVisible));
-        trafficButton.textContent = trafficVisible ? 'Hide traffic' : 'Show traffic';
-        trafficDiagnosticStarted = false;
-        trafficStatus.textContent = trafficVisible ? 'Loading live TomTom traffic tiles…' : 'Live traffic is off.';
-        if (trafficLegend) trafficLegend.hidden = !trafficVisible;
+        setTrafficVisible(!trafficVisible);
       });
+      // The inline page script initializes Leaflet first on DOMContentLoaded.
+      document.addEventListener('DOMContentLoaded', () => setTrafficVisible(true), { once: true });
     }
   }
 

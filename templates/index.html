@@ -707,9 +707,9 @@
             const destinationMarker = L.marker([data.destination.lat, data.destination.lon], { icon: destinationIcon }).addTo(map);
             activeLayers.push(originMarker, destinationMarker);
 
-            // Prefer the recommended option. Without provider geometry, show a dashed straight-line estimate.
-            const displayedRoute = data.results.find(r => r.is_recommended && !r.is_estimate && r.geometry?.length > 2)
-                || data.results.find(r => r.mode === 'driving' && !r.is_estimate && r.geometry?.length > 2)
+            // Prefer a real road-following driving geometry for the shared map.
+            const displayedRoute = data.results.find(r => r.mode === 'driving' && !r.is_estimate && r.geometry?.length >= 2)
+                || data.results.find(r => !r.is_estimate && r.geometry?.length >= 2)
                 || data.results.find(r => r.is_recommended)
                 || data.results.find(r => r.mode === 'driving');
             const routeLine = displayedRoute

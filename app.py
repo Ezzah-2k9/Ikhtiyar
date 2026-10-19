@@ -438,7 +438,7 @@ def calculate_route():
         if driving.get('is_estimate', True):
             route_estimate_note = (
                 f"Driving road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is only an approximate direction, not a street-level route. "
-                "A configured routing provider may improve route accuracy. "
+                "Set a valid ORS_KEY, GEOAPIFY_KEY, or TOMTOM_KEY with routing access for a street-following route. "
             )
         else:
             route_estimate_note = f"Driving road source: {driving.get('provider', routes.get('provider', 'routing provider'))}; the solid map line follows mapped streets. Walking, cycling, and public-transit values may still be estimates. "

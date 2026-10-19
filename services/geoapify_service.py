@@ -5,6 +5,57 @@ from config import Config
 
 class GeoapifyService:
     @staticmethod
+    def get_driving_route(origin_lat, origin_lon, dest_lat, dest_lon):
+        """Request only the driving route so provider failover stays bounded."""
+        api_key = str(Config.GEOAPIFY_KEY or "").strip()
+        if not api_key:
+            raise ValueError("Geoapify key is not configured")
+        response = requests.get(
+            "https://api.geoapify.com/v1/routing",
+            params={
+                "apiKey": api_key,
+                "waypoints": f"{origin_lat},{origin_lon}|{dest_lat},{dest_lon}",
+                "mode": "drive",
+                "units": "metric",
+                "format": "geojson",
+            },
+            timeout=(3, 5),
+        )
+        response.raise_for_status()
+        data = response.json()
+        features = data.get("features") or []
+        if not features:
+            raise ValueError("Geoapify returned no route")
+        feature = features[0]
+        properties = feature.get("properties") or {}
+        route_geometry = feature.get("geometry") or {}
+        coordinates = route_geometry.get("coordinates") or []
+        geometry_type = route_geometry.get("type")
+        if geometry_type == "LineString":
+            lines = [coordinates]
+        elif geometry_type == "MultiLineString":
+            lines = coordinates
+        else:
+            lines = []
+        if not lines:
+            raise ValueError("Geoapify returned no route geometry")
+        geometry = []
+        for line in lines:
+            for point in line:
+                if not isinstance(point, (list, tuple)) or len(point) < 2:
+                    continue
+                pair = [float(point[1]), float(point[0])]
+                if not geometry or pair != geometry[-1]:
+                    geometry.append(pair)
+        if len(geometry) < 2:
+            raise ValueError("Geoapify returned invalid route geometry")
+        return {
+            "distance_km": float(properties["distance"]) / 1000,
+            "duration_min": float(properties["time"]) / 60,
+            "geometry": geometry,
+        }
+
+    @staticmethod
     def get_route(origin_lat, origin_lon, dest_lat, dest_lon):
         """
         Get route from Geoapify API with highly accurate road following

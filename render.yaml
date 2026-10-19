@@ -18,6 +18,8 @@ services:
         sync: false
       - key: TOMTOM_KEY
         sync: false
+      - key: HERE_API_KEY
+        sync: false
       - key: GRAPHHOPPER_KEY
         sync: false
       - key: GEOAPIFY_KEY
