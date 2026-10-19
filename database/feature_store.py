@@ -65,6 +65,7 @@ class FeatureStore:
                     CREATE TABLE IF NOT EXISTS monthly_travel_goals (
                         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                         month TEXT NOT NULL,
+                        goal_type TEXT NOT NULL DEFAULT 'co2_savings',
                         target_co2_kg DOUBLE PRECISION NOT NULL CHECK (target_co2_kg > 0),
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         PRIMARY KEY (user_id, month)
@@ -119,6 +120,7 @@ class FeatureStore:
                     CREATE TABLE IF NOT EXISTS monthly_travel_goals (
                         user_id INTEGER NOT NULL,
                         month TEXT NOT NULL,
+                        goal_type TEXT NOT NULL DEFAULT 'co2_savings',
                         target_co2_kg REAL NOT NULL CHECK (target_co2_kg > 0),
                         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                         PRIMARY KEY (user_id, month),
@@ -129,6 +131,13 @@ class FeatureStore:
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_destinations_user_label "
                 "ON saved_destinations(user_id, lower(label))"
             )
+            if USING_POSTGRES:
+                cursor.execute("ALTER TABLE monthly_travel_goals ADD COLUMN IF NOT EXISTS goal_type TEXT NOT NULL DEFAULT 'co2_savings'")
+            else:
+                cursor.execute("PRAGMA table_info(monthly_travel_goals)")
+                goal_columns = {row['name'] for row in cursor.fetchall()}
+                if 'goal_type' not in goal_columns:
+                    cursor.execute("ALTER TABLE monthly_travel_goals ADD COLUMN goal_type TEXT NOT NULL DEFAULT 'co2_savings'")
             if USING_POSTGRES:
                 cursor.execute("ALTER TABLE saved_destinations ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION")
                 cursor.execute("ALTER TABLE saved_destinations ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION")
@@ -208,7 +217,8 @@ class FeatureStore:
         try:
             placeholder = "%s" if USING_POSTGRES else "?"
             cursor.execute(
-                f"SELECT user_id, month, target_co2_kg, updated_at FROM monthly_travel_goals "
+                f"SELECT user_id, month, goal_type, target_co2_kg AS target_value, "
+                f"target_co2_kg, updated_at FROM monthly_travel_goals "
                 f"WHERE user_id = {placeholder} AND month = {placeholder}",
                 (user_id, month),
             )
@@ -218,23 +228,25 @@ class FeatureStore:
             cursor.close()
             conn.close()
 
-    def save_monthly_goal(self, user_id, month, target_co2_kg):
+    def save_monthly_goal(self, user_id, month, target_value, goal_type="co2_savings"):
         """Upsert this user's target for a single calendar month."""
         conn, cursor = self.db.get_connection()
         try:
             if USING_POSTGRES:
                 cursor.execute(
-                    "INSERT INTO monthly_travel_goals (user_id, month, target_co2_kg) "
-                    "VALUES (%s, %s, %s) ON CONFLICT (user_id, month) DO UPDATE "
-                    "SET target_co2_kg = EXCLUDED.target_co2_kg, updated_at = CURRENT_TIMESTAMP",
-                    (user_id, month, target_co2_kg),
+                    "INSERT INTO monthly_travel_goals (user_id, month, goal_type, target_co2_kg) "
+                    "VALUES (%s, %s, %s, %s) ON CONFLICT (user_id, month) DO UPDATE "
+                    "SET goal_type = EXCLUDED.goal_type, target_co2_kg = EXCLUDED.target_co2_kg, "
+                    "updated_at = CURRENT_TIMESTAMP",
+                    (user_id, month, goal_type, target_value),
                 )
             else:
                 cursor.execute(
-                    "INSERT INTO monthly_travel_goals (user_id, month, target_co2_kg) "
-                    "VALUES (?, ?, ?) ON CONFLICT(user_id, month) DO UPDATE "
-                    "SET target_co2_kg = excluded.target_co2_kg, updated_at = CURRENT_TIMESTAMP",
-                    (user_id, month, target_co2_kg),
+                    "INSERT INTO monthly_travel_goals (user_id, month, goal_type, target_co2_kg) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT(user_id, month) DO UPDATE "
+                    "SET goal_type = excluded.goal_type, target_co2_kg = excluded.target_co2_kg, "
+                    "updated_at = CURRENT_TIMESTAMP",
+                    (user_id, month, goal_type, target_value),
                 )
             conn.commit()
             return True

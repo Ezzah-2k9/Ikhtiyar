@@ -130,3 +130,102 @@
 .dashboard-page .monthly-goal-notice p{margin:4px 0 0;font-size:10px;line-height:1.5}
 @media(max-width:900px){.calculator-page .map-toolbar{grid-template-columns:1fr auto}.calculator-page .traffic-legend{grid-column:1/-1;justify-content:flex-start}.calculator-page .map-data-notes{grid-template-columns:1fr}.settings-page .monthly-goal-settings{grid-template-columns:1fr}}
 @media(max-width:600px){.calculator-page .map-container{padding:11px;border-radius:10px}.calculator-page .map-panel-heading{align-items:flex-start}.calculator-page .map-panel-heading h3{font-size:16px}.calculator-page .map-panel-heading p{max-width:220px;font-size:10px}.calculator-page .map-panel-badge{padding:6px 8px;font-size:7px}.calculator-page .map-toolbar{grid-template-columns:1fr;gap:8px;padding:9px}.calculator-page .traffic-control-group{justify-content:space-between}.calculator-page #traffic-status{min-height:13px}.calculator-page .traffic-legend{grid-column:auto;gap:8px}.calculator-page #map{height:330px;min-height:330px;flex-basis:330px}.settings-page .monthly-goal-settings{padding:15px}.settings-page .monthly-goal-form-row{grid-template-columns:1fr}.dashboard-page .monthly-goal-dashboard{align-items:flex-start;flex-direction:column;padding:17px}.dashboard-page .monthly-goal-link{margin-top:0}}
+
+/* Explicitly center the saved-place dialog in the browser top layer. */
+.calculator-page dialog.save-place-dialog[open]{
+    position:fixed!important;inset:50% auto auto 50%!important;margin:0!important;
+    transform:translate(-50%,-50%)!important;translate:none!important;
+    width:min(430px,calc(100vw - 28px));max-width:calc(100vw - 28px);
+    max-height:min(620px,calc(100dvh - 28px));overflow:auto;overscroll-behavior:contain;
+    border-radius:14px;z-index:6000;
+}
+.calculator-page .save-place-dialog::backdrop{z-index:5999;background:rgba(13,31,23,.58);backdrop-filter:blur(3px)}
+.calculator-page .route-map-status{margin:8px 2px 0;color:#5f6d61;font-size:10px;line-height:1.5}
+.calculator-page .route-map-status:empty{display:none}
+.calculator-page #map .leaflet-overlay-pane{z-index:450}
+.calculator-page #map .leaflet-marker-pane{z-index:600}
+.calculator-page .map-container,.calculator-page .calculator-sidebar,.calculator-page .results-grid,
+.settings-page .settings-layout,.dashboard-page .stats-grid,.dashboard-page .monthly-goal-dashboard{min-width:0}
+.calculator-page .calculator-layout{grid-template-columns:minmax(260px,350px) minmax(0,1fr);align-items:start}
+.calculator-page .results-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}
+.calculator-page .saved-place-tools{grid-template-columns:minmax(0,1fr);}
+.calculator-page .saved-place-tools button{width:100%;min-height:40px;white-space:normal}
+.calculator-page .transport-card,.calculator-page .transport-card *{overflow-wrap:anywhere}
+.calculator-page .map-panel-heading p{max-width:55ch}
+.settings-page .monthly-goal-form select{width:100%;margin-bottom:12px;min-height:42px}
+.settings-page .monthly-goal-target-label{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
+.settings-page .monthly-goal-current{min-height:1.5em}
+
+@media(max-width:1000px){
+    .calculator-page .calculator-layout{grid-template-columns:minmax(0,1fr)}
+    .calculator-page .calculator-sidebar{width:100%}
+    .calculator-page .map-container{width:100%}
+    .calculator-page #map{height:clamp(320px,55vw,450px);min-height:clamp(320px,55vw,450px);flex-basis:clamp(320px,55vw,450px)}
+}
+@media(max-width:768px){
+    .page-wrapper .main-content>.container,.calculator-page .main-content .container{padding-left:16px;padding-right:16px}
+    .calculator-page .calculator-sidebar{padding:clamp(16px,4vw,25px)}
+    .calculator-page .results-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px}
+    .calculator-page .transport-card{padding:16px}
+    .calculator-page .map-toolbar{grid-template-columns:minmax(0,1fr)}
+    .calculator-page #traffic-status{min-height:1.5em}
+    .calculator-page .traffic-legend{grid-column:auto;justify-content:flex-start}
+    .calculator-page .map-data-notes{grid-template-columns:minmax(0,1fr)}
+    .calculator-page .map-panel-heading{align-items:flex-start}
+    .dashboard-page .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .settings-page .settings-layout{grid-template-columns:minmax(0,1fr)}
+    .settings-page .settings-tabs{display:flex;overflow-x:auto;max-width:100%;gap:6px}
+    .settings-page .settings-tabs .tab{flex:1 0 auto;white-space:nowrap}
+    .settings-page .monthly-goal-settings{grid-template-columns:minmax(0,1fr)}
+    .settings-page .monthly-goal-form-row{grid-template-columns:minmax(0,1fr)}
+    .settings-page .monthly-goal-form-row .btn{width:100%}
+}
+@media(max-width:480px){
+    .calculator-page .main-content{padding-top:14px}
+    .calculator-page .calculator-intro{gap:8px}
+    .calculator-page .calculator-index{display:none}
+    .calculator-page .calculator-sidebar{padding:15px;border-radius:12px}
+    .calculator-page .route-presets{display:grid;grid-template-columns:1fr}
+    .calculator-page .route-presets button{width:100%;text-align:left}
+    .calculator-page .form-control{font-size:16px;min-height:46px}
+    .calculator-page .monthly-goal-peek{padding:12px}
+    .calculator-page #map{height:300px;min-height:300px;flex-basis:300px}
+    .calculator-page .map-container{padding:9px}
+    .calculator-page .map-panel-heading{gap:7px;padding-bottom:10px}
+    .calculator-page .map-panel-heading p{max-width:29ch}
+    .calculator-page .map-panel-badge{font-size:0;gap:0}
+    .calculator-page .map-panel-badge i{width:8px;height:8px}
+    .calculator-page .traffic-control-group{align-items:stretch;flex-direction:column}
+    .calculator-page .traffic-control-group button{width:100%;min-height:40px}
+    .calculator-page .traffic-legend{gap:7px}
+    .calculator-page .traffic-legend span{font-size:8px}
+    .calculator-page .transport-buttons{display:grid;grid-template-columns:1fr 1fr}
+    .calculator-page .transport-buttons .btn{margin:0;padding:10px 6px;min-height:42px}
+    .calculator-page .save-place-dialog[open]{padding:18px}
+    .dashboard-page .stats-grid{grid-template-columns:minmax(0,1fr)}
+    .settings-page .settings-card{padding:16px 12px}
+    .settings-page .preference-number-grid,.settings-page .profile-edit-grid,.settings-page .password-change-grid{grid-template-columns:minmax(0,1fr)}
+    .settings-page .monthly-goal-settings{padding:13px}
+    .dashboard-page .monthly-goal-dashboard{padding:15px}
+}
+@media(prefers-reduced-motion:reduce){.calculator-page .save-place-dialog,.calculator-page #map,.dashboard-page .monthly-goal-progress span{scroll-behavior:auto;transition:none}}
+
+
+/* Keep the calculator usable on extra-narrow phones without shrinking map controls. */
+@media (max-width: 360px) {
+    .calculator-page .page-wrapper,
+    .calculator-page .main-content,
+    .calculator-page .site-footer {
+        max-width: 100%;
+        overflow-x: clip;
+    }
+    .calculator-page .calculator-intro > div {
+        min-width: 0;
+        max-width: 100%;
+    }
+    .calculator-page .calculator-intro h1,
+    .calculator-page .calculator-intro p,
+    .calculator-page .calculator-intro .page-kicker {
+        overflow-wrap: anywhere;
+    }
+}

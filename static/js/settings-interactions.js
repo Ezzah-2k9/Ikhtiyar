@@ -49,6 +49,33 @@
     update();
   });
 
+  const goalType = document.querySelector('#monthly-goal-type');
+  const goalTarget = document.querySelector('#monthly-goal-target');
+  const goalLabel = document.querySelector('[data-goal-target-label]');
+  const goalCurrent = document.querySelector('[data-goal-current]');
+  const goalOptions = {
+    co2_savings: { title: 'CO₂ savings', unit: 'kg CO₂', max: 1000, step: '0.1', example: '10' },
+    spending_limit: { title: 'Transport budget', unit: 'AED', max: 100000, step: '1', example: '500' },
+    trip_count: { title: 'Trips this month', unit: 'trips', max: 500, step: '1', example: '20' },
+    sustainable_trips: { title: 'Lower-impact trips', unit: 'trips', max: 500, step: '1', example: '10' },
+    active_distance: { title: 'Active travel distance', unit: 'km', max: 5000, step: '1', example: '25' },
+  };
+  if (goalType && goalTarget) {
+    const updateGoalFields = (clearValue = false) => {
+      const option = goalOptions[goalType.value] || goalOptions.co2_savings;
+      if (goalLabel) goalLabel.innerHTML = `This month’s target <span>${option.unit}</span>`;
+      goalTarget.max = String(option.max);
+      goalTarget.step = option.step;
+      goalTarget.placeholder = `e.g., ${option.example}`;
+      if (clearValue) goalTarget.value = '';
+      if (goalCurrent && !goalTarget.value) {
+        goalCurrent.textContent = `Enter your ${option.title.toLowerCase()} target for this month.`;
+      }
+    };
+    goalType.addEventListener('change', () => updateGoalFields(true));
+    updateGoalFields();
+  }
+
   const selected = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true') || tabs[0];
   activate(selected.dataset.settingsTab);
 })();
