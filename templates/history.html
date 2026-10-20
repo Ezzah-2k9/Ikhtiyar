@@ -11,34 +11,12 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-shell.css') }}">
 </head>
 
 <body class="history-page">
     <div class="page-wrapper">
-        <nav class="navbar">
-            <div class="container">
-                <a href="/home" class="logo">
-                    <picture class="brand-picture">
-                        <source media="(max-width: 650px)" srcset="{{ url_for('static', filename='images/ikhtiyar-black.png') }}">
-                        <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
-                    </picture>
-                    
-                </a>
-                <div class="nav-links">
-                    <a href="/home">Home</a>
-                    <a href="/dashboard">Dashboard</a>
-                    <a href="/history" class="active">History</a>
-                    <a href="/settings">Settings</a>
-                </div>
-                <div class="nav-user-section">
-                    <div class="nav-divider"></div>
-                    <div class="nav-username">{{ username }}</div>
-                    <a href="/logout" class="logout-link">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </a>
-                </div>
-            </div>
-        </nav>
+        {% include 'components/navbar.html' %}
 
         <main class="main-content">
             <div class="container">

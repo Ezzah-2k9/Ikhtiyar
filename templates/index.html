@@ -5,7 +5,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Route Calculator - Ikhtiyar</title>
+    <title>Home — Ikhtiyar</title>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-refresh.css') }}">
@@ -373,32 +373,12 @@
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/feature-enhancements.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-shell.css') }}">
 </head>
 
 <body class="calculator-page">
     <div class="page-wrapper">
-        <nav class="navbar">
-            <div class="container">
-                <a href="/home" class="logo">
-                    <picture class="brand-picture">
-                        <source media="(max-width: 650px)" srcset="{{ url_for('static', filename='images/ikhtiyar-black.png') }}">
-                        <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
-                    </picture>
-                    
-                </a>
-                <div class="nav-links">
-                    <a href="/home" class="active">Calculator</a>
-                    <a href="/dashboard">Dashboard</a>
-                    <a href="/history">History</a>
-                    <a href="/settings">Settings</a>
-                </div>
-                <div class="nav-user-section">
-                    <div class="nav-divider"></div>
-                    <div class="nav-username">{{ username }}</div>
-                    <a href="/logout" class="logout-link"><i class="fas fa-sign-out-alt"></i></a>
-                </div>
-            </div>
-        </nav>
+        {% include 'components/navbar.html' %}
 
         <main class="main-content">
             <div class="container calculator-container" style="margin-top: 20px;">
@@ -429,6 +409,53 @@
                 </div>
                 {% endif %}
 
+                <section class="home-overview" aria-label="Your travel progress and recent journeys">
+                    <article class="home-xp-card" aria-labelledby="home-xp-title">
+                        <div class="home-card-heading">
+                            <span class="page-kicker">YOUR JOURNEY XP</span>
+                            <a href="/dashboard">Open dashboard <span aria-hidden="true">↗</span></a>
+                        </div>
+                        <div class="home-xp-total">
+                            <strong id="home-xp-title">{{ gamification.total_points }}</strong>
+                            <span>total XP</span>
+                        </div>
+                        <div class="home-xp-stats">
+                            <div><strong>{{ gamification.level }}</strong><span>Level</span></div>
+                            <div><strong>{{ gamification.current_streak }}</strong><span>Day streak</span></div>
+                            <div><strong>{{ gamification.points_to_next_level }}</strong><span>XP to next level</span></div>
+                        </div>
+                        <div class="home-xp-progress" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ gamification.level_progress }}">
+                            <span style="width: {{ gamification.level_progress }}%"></span>
+                        </div>
+                        <p>{{ gamification.level_progress }} / 100 XP to the next level · {{ gamification.level_title }}</p>
+                    </article>
+
+                    <article class="home-activity-card" aria-labelledby="home-activity-title">
+                        <div class="home-card-heading">
+                            <div><span class="page-kicker">RECENT ACTIVITY</span><h2 id="home-activity-title">Your latest journeys</h2></div>
+                            <a href="/history">View all <span aria-hidden="true">↗</span></a>
+                        </div>
+                        {% if recent %}
+                        <ol class="home-activity-list">
+                            {% for trip in recent %}
+                            <li>
+                                <div class="home-activity-route">
+                                    <strong>{{ trip.origin_name }} <span aria-hidden="true">→</span> {{ trip.destination_name }}</strong>
+                                    <small>{{ trip.chosen_transport.title() }} · {{ trip.trip_date[:10] if trip.trip_date else 'Recent journey' }}</small>
+                                </div>
+                                <div class="home-activity-impact">
+                                    <strong>{{ "%.2f"|format(trip.chosen_cost or 0) }} AED</strong>
+                                    {% if trip.co2_saved > 0 %}<small>{{ "%.2f"|format(trip.co2_saved) }} kg CO₂ saved</small>{% endif %}
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ol>
+                        {% else %}
+                        <p class="home-activity-empty">Your recorded journeys will appear here. Compare a route and save your choice to start earning XP.</p>
+                        {% endif %}
+                    </article>
+                </section>
+
                 <div class="calculator-layout">
                     <div class="calculator-sidebar">
                         <h3><i class="fas fa-route"></i> Plan Your Route</h3>
@@ -439,7 +466,7 @@
                             <input id="origin" class="form-control" placeholder="e.g., Dubai Mall" value="Dubai Mall">
                             <div class="saved-place-tools">
                                 <select id="saved-origin-select" class="saved-place-select" aria-label="Choose a saved starting point"><option value="">Use a saved place as start</option></select>
-                                <button type="button" data-save-place="origin">Save as top destination</button>
+                                <button type="button" data-save-place="origin">Save top destination</button>
                             </div>
                         </div>
 
@@ -448,7 +475,7 @@
                             <input id="destination" class="form-control" placeholder="e.g., Dubai Marina" value="Dubai Marina">
                             <div class="saved-place-tools">
                                 <select id="saved-destination-select" class="saved-place-select" aria-label="Choose a saved destination"><option value="">Use a saved place as destination</option></select>
-                                <button type="button" data-save-place="destination">Save as top destination</button>
+                                <button type="button" data-save-place="destination">Save top destination</button>
                             </div>
                         </div>
 
@@ -484,17 +511,10 @@
 
                     <div class="map-container">
                         <div class="map-panel-heading">
-                            <div><span class="page-kicker">YOUR JOURNEY</span><h3>Route &amp; live conditions</h3><p>Plan with a mapped route, current traffic flow, and destination weather.</p></div>
+                            <div><span class="page-kicker">YOUR JOURNEY</span><h3>Route &amp; live conditions</h3><p>Compare road routes, travel choices, and destination weather.</p></div>
                             <span class="map-panel-badge"><i aria-hidden="true"></i> MAP VIEW</span>
                         </div>
-                        <div class="map-toolbar">
-                            <div class="traffic-control-group"><span class="traffic-control-label"><i class="fa-solid fa-road" aria-hidden="true"></i> TRAFFIC FLOW</span><button id="traffic-toggle" type="button" aria-pressed="false">Show traffic</button></div>
-                            <small id="traffic-status" role="status">Traffic overlay status</small>
-                            <div id="traffic-legend" class="traffic-legend" hidden aria-label="Traffic-flow legend">
-                                <span><i class="free"></i>Freer flow</span><span><i class="moderate"></i>Moderate</span><span><i class="slow"></i>Slow</span><span><i class="heavy"></i>Heavy</span><span><i class="closed"></i>Closed</span>
-                            </div>
-                        </div>
-                        <div id="map" data-traffic-available="{{ 'true' if traffic_available else 'false' }}"></div>
+                        <div id="map"></div>
                         <div class="map-data-notes"><div id="weather-advisory" class="weather-advisory" role="status" aria-live="polite"></div><div id="route-estimate-note" class="estimate-banner" hidden></div></div>
                     </div>
                 </div>
@@ -557,17 +577,17 @@
         </div>
         <dialog id="save-place-dialog" class="save-place-dialog" aria-labelledby="save-place-title">
             <form id="save-place-form">
-                <h2 id="save-place-title">Save a favourite place</h2>
-                <p>Save this <span id="save-place-target">destination</span> so you can reuse it as a start or end point.</p>
-                <label for="save-place-label">Your name for this place
-                    <input id="save-place-label" type="text" maxlength="40" placeholder="Home, work, office" required>
+                <span class="save-place-icon" aria-hidden="true"><i class="fa-solid fa-bookmark"></i></span><h2 id="save-place-title">Save a top destination</h2>
+                <p>Give this <span id="save-place-target">destination</span> a name. It will be ready whenever you plan another route.</p><div class="save-place-preview"><span>Location</span><strong id="save-place-location-label"></strong></div>
+                <label for="save-place-label">Name your saved place
+                    <input id="save-place-label" type="text" maxlength="40" placeholder="Home, Work, Office" autocomplete="off" required>
                 </label>
                 <input id="save-place-location" type="hidden">
                 <input id="save-place-latitude" type="hidden">
                 <input id="save-place-longitude" type="hidden">
                 <div class="dialog-actions">
                     <button id="save-place-cancel" type="button">Cancel</button>
-                    <button type="submit">Save place</button>
+                    <button type="submit">Save destination</button>
                 </div>
             </form>
         </dialog>
@@ -807,7 +827,7 @@
                         return;
                     }
                     if (!data.gamification) window.IkhtiyarFeatures?.showToast(`Trip recorded. Estimated CO₂ saved: ${data.saved_co2} kg.`);
-                    window.setTimeout(() => { window.location.href = '/dashboard'; }, 2200);
+                    window.setTimeout(() => { window.location.href = '/home'; }, 2200);
                 } else {
                     alert('Failed to record trip. Please try again.');
                 }
@@ -949,7 +969,7 @@
         };
     </script>
     <script src="{{ url_for('static', filename='js/theme-interactions.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='js/calculator-features.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/calculator-features.js') }}?v=20261020-home-no-traffic" defer></script>
 {% include 'components/footer.html' %}
 </body>
 

@@ -1,22 +1,65 @@
-
-<nav class="navbar">
+<nav class="navbar" aria-label="Main navigation">
     <div class="container">
-        <a href="/home" class="logo">
-            <picture class="brand-picture"><source media="(max-width: 650px)" srcset="{{ url_for('static', filename='images/ikhtiyar-black.png') }}"><img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')"></picture>
-            
+        <a href="/home" class="logo" aria-label="Ikhtiyar home">
+            <picture class="brand-picture">
+                <source media="(max-width: 650px)" srcset="{{ url_for('static', filename='images/ikhtiyar-black.png') }}">
+                <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
+            </picture>
         </a>
-        <div class="nav-links">
-            <a href="/home" class="{% if request.endpoint == 'index' %}active{% endif %}">Calculator</a>
-            <a href="/dashboard" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
-            <a href="/history" class="{% if request.endpoint == 'history' %}active{% endif %}">History</a>
-            <a href="/settings" class="{% if request.endpoint == 'settings' %}active{% endif %}">Settings</a>
-        </div>
-        <div class="nav-user-section">
-            <div class="nav-divider"></div>
-            <div class="nav-username">{{ username }}</div>
-            <a href="/logout" class="logout-link">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
+        <button class="nav-toggle" type="button" aria-controls="primary-navigation" aria-expanded="false">
+            <span>Menu</span><i class="fa-solid fa-bars" aria-hidden="true"></i>
+        </button>
+        <div class="nav-content" id="primary-navigation">
+            <div class="nav-links">
+                <a href="/home" class="{% if request.endpoint == 'index' %}active{% endif %}" {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>Home</a>
+                <a href="/dashboard" class="{% if request.endpoint == 'dashboard' %}active{% endif %}" {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
+                <a href="/history" class="{% if request.endpoint == 'history' %}active{% endif %}" {% if request.endpoint == 'history' %}aria-current="page"{% endif %}>History</a>
+                <a href="/settings" class="{% if request.endpoint == 'settings' %}active{% endif %}" {% if request.endpoint == 'settings' %}aria-current="page"{% endif %}>Settings</a>
+            </div>
+            <div class="nav-user-section">
+                <span class="nav-divider" aria-hidden="true"></span>
+                <span class="nav-username">{{ username }}</span>
+                <a href="/logout" class="logout-link" aria-label="Sign out"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></a>
+            </div>
         </div>
     </div>
 </nav>
+<script>
+(() => {
+    const nav = document.querySelector('.navbar');
+    if (!nav) return;
+    const toggle = nav.querySelector('.nav-toggle');
+    const menu = nav.querySelector('.nav-content');
+    const compact = window.matchMedia('(max-width: 760px)');
+    if (!toggle || !menu) return;
+    const sync = () => {
+        toggle.hidden = !compact.matches;
+        if (!compact.matches) {
+            menu.hidden = false;
+            toggle.setAttribute('aria-expanded', 'false');
+            return;
+        }
+        menu.hidden = toggle.getAttribute('aria-expanded') !== 'true';
+    };
+    toggle.addEventListener('click', () => {
+        const open = toggle.getAttribute('aria-expanded') !== 'true';
+        toggle.setAttribute('aria-expanded', String(open));
+        menu.hidden = !open;
+    });
+    menu.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => {
+        if (compact.matches) {
+            toggle.setAttribute('aria-expanded', 'false');
+            menu.hidden = true;
+        }
+    }));
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && compact.matches) {
+            toggle.setAttribute('aria-expanded', 'false');
+            menu.hidden = true;
+            toggle.focus();
+        }
+    });
+    compact.addEventListener('change', sync);
+    sync();
+})();
+</script>
