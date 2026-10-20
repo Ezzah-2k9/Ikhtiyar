@@ -21,21 +21,43 @@
     trafficLoadFailed = true;
     const tile = event?.coords;
     if (!tile || !Number.isInteger(tile.z) || !Number.isInteger(tile.x) || !Number.isInteger(tile.y)) {
-      trafficStatus.textContent = 'Traffic tiles failed to load. Check the Render service logs for the upstream provider response.';
+      trafficStatus.textContent = 'Traffic tiles failed to load. Reload the map and check the latest Render service logs.';
       return;
     }
     try {
       const response = await fetch(`/api/traffic/${tile.z}/${tile.x}/${tile.y}.png`, { cache: 'no-store' });
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.toLowerCase().includes('application/json')) {
+        trafficStatus.textContent = `Ikhtiyar returned HTTP ${response.status} without traffic error details. Check the Render service health and logs; the browser cannot repair a stopped or unhealthy server.`;
+        return;
+      }
       const payload = await response.json().catch(() => ({}));
       const reason = String(payload.error || 'Traffic tile request failed.');
-      if (response.status === 401 || response.status === 403) {
-        trafficStatus.textContent = 'Traffic provider denied access. Check TomTom Traffic Flow access or HERE traffic-tile access in Render.';
-      } else if (response.status === 429) {
-        trafficStatus.textContent = 'Traffic quota or rate limit reached. Check the configured provider plan and usage.';
-      } else if (response.status >= 500) {
-        trafficStatus.textContent = 'Traffic service is temporarily unavailable. Check Render service and provider logs.';
+      const upstreamStatus = Number(payload.upstream_status || 0);
+      if (payload.code === 'AUTH_REQUIRED' || (response.status === 401 && payload.source !== 'provider')) {
+        trafficStatus.textContent = 'Your sign-in has expired. Sign in again to load traffic.';
+      } else if (payload.source === 'provider' && (upstreamStatus === 401 || upstreamStatus === 403)) {
+        const provider = String(payload.provider || 'TomTom');
+        const detail = String(payload.detail || 'The provider rejected this key for the requested traffic service.');
+        trafficStatus.textContent = `${provider} denied access (HTTP ${upstreamStatus}): ${detail} Confirm Render’s TOMTOM_KEY is the same saved key with Traffic API access.`;
+      } else if (payload.code === 'UPSTREAM_HTTP_ERROR') {
+        const provider = String(payload.provider || 'TomTom');
+        const detail = String(payload.detail || reason);
+        if (upstreamStatus === 429) {
+          trafficStatus.textContent = `${reason} Provider detail: ${detail} Check the provider usage limit.`;
+        } else {
+          trafficStatus.textContent = `${provider} traffic request failed (HTTP ${upstreamStatus}). ${detail}`;
+        }
+      } else if (response.status === 429 || upstreamStatus === 429) {
+        trafficStatus.textContent = `${reason} Check the provider usage limit.`;
+      } else if (payload.code === 'UPSTREAM_TIMEOUT') {
+        trafficStatus.textContent = 'TomTom traffic tile request timed out. Try again shortly; if it continues, check the Render service logs.';
+      } else if (payload.code === 'UPSTREAM_NETWORK_ERROR') {
+        trafficStatus.textContent = 'Ikhtiyar could not reach TomTom. Check the Render service logs and network status.';
+      } else if (payload.source === 'provider' || response.status >= 500) {
+        trafficStatus.textContent = reason;
       } else {
-        trafficStatus.textContent = `Traffic overlay failed: ${reason} Check the latest Render service logs for details.`;
+        trafficStatus.textContent = `Traffic overlay failed: ${reason}`;
       }
     } catch (_error) {
       trafficStatus.textContent = 'Could not read the traffic error details. Check the latest Render service logs.';
@@ -72,12 +94,15 @@
       opacity: 0.88,
       maxNativeZoom: 20,
       maxZoom: 22,
-      attribution: 'Traffic flow © TomTom / HERE',
+      attribution: 'Traffic flow © TomTom',
       crossOrigin: 'anonymous',
     });
     trafficLayer.on('tileerror', explainTrafficFailure);
     trafficLayer.on('tileload', () => {
-      if (trafficVisible && !trafficLoadFailed) trafficStatus.textContent = 'Live traffic overlay loaded.';
+      if (trafficVisible) {
+        trafficLoadFailed = false;
+        trafficStatus.textContent = 'Live traffic overlay loaded.';
+      }
     });
   }
 
@@ -85,7 +110,7 @@
     if (!trafficAvailable) {
       trafficButton.disabled = true;
       trafficButton.setAttribute('aria-pressed', 'false');
-      trafficStatus.textContent = 'Add TOMTOM_KEY (or TOMTOM_API_KEY) or HERE_API_KEY in Render to enable live traffic.';
+      trafficStatus.textContent = 'Add TOMTOM_KEY in Render to enable live traffic.';
     } else {
       trafficStatus.textContent = 'Loading live traffic tiles…';
       createTrafficLayer();
@@ -294,3 +319,4 @@
     if (messages.length) showToast(messages.join(' '));
   });
 })();
+
