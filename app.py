@@ -165,13 +165,19 @@ def delete_saved_destination_api(destination_id):
 @app.route('/api/traffic/<int:zoom>/<int:x>/<int:y>.png')
 def traffic_tile(zoom, x, y):
     if 'user_id' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-    image, error, status = TrafficService.get_tile(zoom, x, y)
+        return jsonify({
+            'error': 'Your sign-in has expired. Sign in again to load traffic.',
+            'source': 'application',
+            'code': 'AUTH_REQUIRED',
+        }), 401
+    image, error, status, details = TrafficService.get_tile(zoom, x, y)
     if status != 200:
-        return jsonify({'error': error}), status
+        return jsonify({'error': error, **details}), status
     response = Response(image, mimetype='image/png')
     response.headers['Cache-Control'] = 'private, max-age=60'
     response.headers['X-Content-Type-Options'] = 'nosniff'
+    if details.get('provider'):
+        response.headers['X-Traffic-Provider'] = details['provider']
     return response
 
 @app.route('/recommendations')
@@ -871,3 +877,4 @@ def download_dashboard_pdf():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG') == '1')
+
