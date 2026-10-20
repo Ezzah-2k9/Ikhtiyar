@@ -63,6 +63,7 @@
   const destinationInput = $('#destination');
   const dialog = $('#save-place-dialog');
   const saveForm = $('#save-place-form');
+  const locationPreview = $('#save-place-location-label');
   let savedPlaces = [];
   let saveTarget = null;
 
