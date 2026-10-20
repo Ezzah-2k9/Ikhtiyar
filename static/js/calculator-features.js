@@ -85,7 +85,7 @@
     if (!trafficAvailable) {
       trafficButton.disabled = true;
       trafficButton.setAttribute('aria-pressed', 'false');
-      trafficStatus.textContent = 'Add TOMTOM_KEY or HERE_API_KEY in Render to enable live traffic.';
+      trafficStatus.textContent = 'Add TOMTOM_KEY (or TOMTOM_API_KEY) or HERE_API_KEY in Render to enable live traffic.';
     } else {
       trafficStatus.textContent = 'Loading live traffic tiles…';
       createTrafficLayer();

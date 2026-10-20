@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv
 
@@ -23,7 +22,9 @@ class Config:
     # API Keys - Check environment variables first
     LOCATIONIQ_KEY = os.environ.get('LOCATIONIQ_KEY', '')
     ORS_KEY = os.environ.get('ORS_KEY', '')
-    TOMTOM_KEY = os.environ.get('TOMTOM_KEY', '')
+    # TOMTOM_KEY is the documented Render variable. Accept the common alias too
+    # so existing deployments named TOMTOM_API_KEY do not silently disable it.
+    TOMTOM_KEY = os.environ.get('TOMTOM_KEY') or os.environ.get('TOMTOM_API_KEY', '')
     HERE_API_KEY = os.environ.get('HERE_API_KEY', '')
     GRAPHHOPPER_KEY = os.environ.get('GRAPHHOPPER_KEY', '')
     GEOAPIFY_KEY = os.environ.get('GEOAPIFY_KEY', '')
