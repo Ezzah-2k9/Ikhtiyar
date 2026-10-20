@@ -20,7 +20,8 @@ class OpenRouteService:
             dict: Route information with distance, duration, and geometry
         """
         try:
-            url = f"{OpenRouteService.BASE_URL}/v2/directions/{transport_mode}"
+            # The explicit GeoJSON endpoint returns route coordinates as [lon, lat].
+            url = f"{OpenRouteService.BASE_URL}/v2/directions/{transport_mode}/geojson"
             
             headers = {
                 'Authorization': Config.ORS_KEY,
@@ -30,29 +31,37 @@ class OpenRouteService:
             body = {
                 'coordinates': [[origin_lon, origin_lat], [dest_lon, dest_lat]],
                 'instructions': False,
-                'geometry': True,
-                'format': 'geojson'
+                'geometry': True
             }
             
-            response = requests.post(url, headers=headers, json=body, timeout=10)
+            response = requests.post(url, headers=headers, json=body, timeout=5)
             response.raise_for_status()
             
             data = response.json()
             
-            if 'routes' not in data or len(data['routes']) == 0:
-                raise Exception("No route found in OpenRouteService response")
-            
-            route = data['routes'][0]
-            
-            # Convert geometry from GeoJSON format to simple coordinate pairs
-            geometry = []
-            if 'geometry' in route and 'coordinates' in route['geometry']:
-                # OpenRouteService returns [lon, lat], we need [lat, lon]
-                geometry = [[coord[1], coord[0]] for coord in route['geometry']['coordinates']]
+            if data.get('features'):
+                feature = data['features'][0]
+                properties = feature.get('properties') or {}
+                summary = properties.get('summary') or {}
+                geometry_data = feature.get('geometry') or {}
+                coordinates = geometry_data.get('coordinates') or []
+            elif data.get('routes'):
+                # Keep compatibility with ORS JSON responses if the server returns one.
+                route = data['routes'][0]
+                summary = route.get('summary') or {}
+                geometry_data = route.get('geometry') or {}
+                coordinates = geometry_data.get('coordinates') or []
+            else:
+                raise ValueError("No route found in OpenRouteService response")
+
+            if geometry_data.get('type') != 'LineString' or len(coordinates) < 2:
+                raise ValueError("No usable route geometry in OpenRouteService response")
+            # OpenRouteService GeoJSON uses [longitude, latitude]; Leaflet uses [latitude, longitude].
+            geometry = [[float(coord[1]), float(coord[0])] for coord in coordinates]
             
             return {
-                'distance_km': round(route['summary']['distance'] / 1000, 2),
-                'duration_min': round(route['summary']['duration'] / 60, 0),
+                'distance_km': round(float(summary['distance']) / 1000, 2),
+                'duration_min': round(float(summary['duration']) / 60, 0),
                 'geometry': geometry
             }
             

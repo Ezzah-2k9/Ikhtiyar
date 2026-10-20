@@ -18,7 +18,7 @@ from services.weather_service import WeatherService
 from services.transit_availability import check_metro_availability
 from services.traffic_service import TrafficService
 from services.gamification import build_weekly_challenges, current_week_start, level_from_points, uae_today
-from services.monthly_goals import GOAL_TYPES, build_goal_state, month_key, previous_month_key
+from services.monthly_goals import GOAL_METRICS, build_goal_state, month_key, previous_month_key
 from ml.predictor import TransportPredictor
 from ml.trip_recommender import TripRecommender
 import os
@@ -47,16 +47,11 @@ def monthly_goal_context(user_id, history, today=None):
         finished=True,
     )
     if previous:
-        value = previous['current_value']
-        target = previous['target_value']
-        if previous['direction'] == 'limit':
-            actual = f"{value:.2f} {previous['unit']} spent against a {target:.2f} {previous['unit']} limit"
-        else:
-            actual = f"{value:.2f} {previous['unit']} {previous['aggregate_label']} of {target:.2f} {previous['unit']}"
+        outcome = 'reached' if previous['reached'] else 'was not met'
         previous['notice'] = (
-            f"Last month's {previous['title'].lower()} goal was met: {actual}."
-            if previous['reached'] else
-            f"Last month's {previous['title'].lower()} goal was not met: {actual}. You can set a new target this month."
+            f"Last month's {previous['goal_label']} target {outcome}: "
+            f"{previous['current_value']:.2f} / {previous['target_value']:.2f} {previous['goal_unit']}. "
+            "You can set a new target for this month."
         )
     return {
         'current': current,
@@ -294,9 +289,12 @@ def calculate_route():
             print(f"Transport predictor unavailable: {error}")
             recommended_mode = 'driving'
 
-        monthly_goal_active = bool(monthly_goal and goal_context['history_saving_enabled'])
+        monthly_goal_active = bool(
+            monthly_goal and goal_context['history_saving_enabled']
+            and not monthly_goal['reached']
+        )
         goal_label = (
-            monthly_goal['title'].upper() if monthly_goal_active
+            f"MONTHLY {monthly_goal['goal_label'].upper()} GOAL" if monthly_goal_active
             else 'YOUR PREFERENCES'
         )
         modes = ['driving', 'taxi', 'bus', 'walking', 'cycling']
@@ -380,15 +378,13 @@ def calculate_route():
             max(1, min(10, int(prefs.get('priority_environment', 5)))),
         ]
         if monthly_goal_active:
-            # The selected monthly target gently shapes all recommendations and
-            # becomes the leading preference when the user is behind pace.
-            goal_boost = 3 if monthly_goal['behind_pace'] else 1.5
-            if monthly_goal['goal_type'] in {'co2_savings', 'sustainable_trips'}:
-                raw_preferences[2] = max(raw_preferences[2], goal_boost * (raw_preferences[0] + raw_preferences[1]))
-            elif monthly_goal['goal_type'] == 'spending_limit':
-                raw_preferences[1] = max(raw_preferences[1], goal_boost * (raw_preferences[0] + raw_preferences[2]))
-            elif monthly_goal['goal_type'] == 'active_distance':
-                raw_preferences[2] = max(raw_preferences[2], goal_boost * (raw_preferences[0] + raw_preferences[1]))
+            # A monthly goal can influence ranking, but every option remains selectable.
+            if monthly_goal['goal_metric'] in ('co2_saved', 'sustainable_trips'):
+                raw_preferences[2] = max(raw_preferences[2], 3 * (raw_preferences[0] + raw_preferences[1]))
+            elif monthly_goal['goal_metric'] == 'budget':
+                raw_preferences[1] = max(raw_preferences[1], 3 * (raw_preferences[0] + raw_preferences[2]))
+            elif monthly_goal['goal_metric'] == 'active_distance':
+                raw_preferences[2] = max(raw_preferences[2], 2 * (raw_preferences[0] + raw_preferences[1]))
         weight_sum = sum(raw_preferences) or 1
         weights = [value / weight_sum for value in raw_preferences]
 
@@ -402,6 +398,7 @@ def calculate_route():
             'co2': [float(item['co2'] or 0) for item in results],
             'distance': [float(item['distance'] or 0) for item in results],
         }
+        goal_metric = monthly_goal.get('goal_metric') if monthly_goal_active else None
         budget = float(prefs.get('budget_per_trip', 50) or 0)
         for index, item in enumerate(results):
             score = (
@@ -411,17 +408,12 @@ def calculate_route():
             )
             if budget > 0 and float(item['cost'] or 0) > budget:
                 score *= 0.85
+            if goal_metric == 'active_distance':
+                score *= 1.2 if item['mode'] in ('walking', 'cycling') else 0.8
             if apparent_temp is not None and apparent_temp >= max_walk_temp and item['mode'] in ('walking', 'cycling'):
                 score *= 0.65
             if item['mode'] == recommended_mode:
                 score += 0.02
-            if monthly_goal_active and monthly_goal['goal_type'] in {'sustainable_trips', 'active_distance'}:
-                active_mode = item['mode'] in {'walking', 'cycling'}
-                green_mode = item['mode'] in {'walking', 'cycling', 'metro', 'bus'}
-                if monthly_goal['goal_type'] == 'active_distance' and active_mode:
-                    score += 0.15 if monthly_goal['behind_pace'] else 0.07
-                elif monthly_goal['goal_type'] == 'sustainable_trips' and green_mode:
-                    score += 0.12 if monthly_goal['behind_pace'] else 0.06
             item['_rank_score'] = score
 
         results.sort(key=lambda item: item['_rank_score'], reverse=True)
@@ -446,7 +438,7 @@ def calculate_route():
         if driving.get('is_estimate', True):
             route_estimate_note = (
                 f"Driving road source: {routes.get('provider', 'built-in estimate')}. The dashed map line is only an approximate direction, not a street-level route. "
-                "A configured routing provider may improve route accuracy. "
+                "Set a valid ORS_KEY, GEOAPIFY_KEY, or TOMTOM_KEY (also accepted as TOMTOM_API_KEY) with routing access for a street-following route. "
             )
         else:
             route_estimate_note = f"Driving road source: {driving.get('provider', routes.get('provider', 'routing provider'))}; the solid map line follows mapped streets. Walking, cycling, and public-transit values may still be estimates. "
@@ -699,26 +691,17 @@ def settings():
 
         if action == 'monthly_goal':
             try:
-                goal_type = request.form.get('goal_type', 'co2_savings')
-                if goal_type not in GOAL_TYPES:
-                    raise ValueError('Choose a valid monthly goal type.')
+                metric = str(request.form.get('goal_metric', 'co2_saved'))
+                if metric not in GOAL_METRICS:
+                    raise ValueError('Choose a valid monthly goal metric.')
                 target = float(request.form.get('target_value', '0'))
-                maximums = {
-                    'co2_savings': 1000, 'spending_limit': 100000,
-                    'trip_count': 500, 'sustainable_trips': 500,
-                    'active_distance': 5000,
-                }
-                if not math.isfinite(target) or not 0 <= target <= maximums[goal_type]:
-                    raise ValueError(f"Enter a {GOAL_TYPES[goal_type]['title'].lower()} target from 0 to {maximums[goal_type]} {GOAL_TYPES[goal_type]['unit']}.")
+                if not math.isfinite(target) or target <= 0 or target > 100000:
+                    raise ValueError('Enter a positive monthly target within the allowed range.')
                 period = month_key(uae_today())
-                if target == 0:
-                    feature_store.remove_monthly_goal(user_id, period)
-                    flash('The monthly goal is turned off for this month.', 'success')
-                else:
-                    feature_store.save_monthly_goal(user_id, period, round(target, 2), goal_type)
-                    flash(f"Monthly {GOAL_TYPES[goal_type]['title'].lower()} goal saved. Saved trips this month count toward it.", 'success')
+                feature_store.save_monthly_goal(user_id, period, round(target, 2), metric)
+                flash('Monthly travel goal saved. All saved trips this month count toward it.', 'success')
             except (TypeError, ValueError) as error:
-                flash(str(error) or 'Enter a valid monthly target.', 'error')
+                flash(str(error) or 'Enter a valid monthly CO₂ target.', 'error')
             return redirect(url_for('settings', tab='preferences'))
 
         flash('That settings action is not recognized.', 'error')
@@ -741,7 +724,7 @@ def settings():
     return render_template(
         'settings.html', user=user, prefs=prefs, privacy=privacy,
         username=session['username'], email=user.get('email', ''), active_tab=active_tab,
-        monthly_goal=monthly_goal_state, goal_types=GOAL_TYPES
+        monthly_goal=monthly_goal_state
     )
 
 @app.route('/settings/export')

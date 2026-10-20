@@ -457,12 +457,12 @@
                         <section class="monthly-goal-peek" aria-labelledby="calculator-monthly-goal-title">
                             <div class="monthly-goal-peek-heading">
                                 <span class="goal-emblem" aria-hidden="true"><i class="fa-solid fa-leaf"></i></span>
-                                <div><span class="page-kicker">YOUR MONTHLY TARGET</span><h4 id="calculator-monthly-goal-title">{{ monthly_goal.title if monthly_goal else 'Choose your goal' }}</h4></div>
+                                <div><span class="page-kicker">YOUR MONTHLY TARGET</span><h4 id="calculator-monthly-goal-title">{{ monthly_goal.goal_label if monthly_goal else 'Travel progress' }}</h4></div>
                             </div>
                             {% if monthly_goal %}
                             <div class="monthly-goal-peek-progress"><span style="width: {{ monthly_goal.progress_percent }}%"></span></div>
-                            <p><strong>{% if monthly_goal.direction == 'limit' %}{{ '%.2f'|format(monthly_goal.current_value) }} / {{ '%.2f'|format(monthly_goal.target_value) }} {{ monthly_goal.unit }}{% else %}{{ monthly_goal.current_value|int if monthly_goal.unit == 'trips' else '%.2f'|format(monthly_goal.current_value) }} / {{ monthly_goal.target_value|int if monthly_goal.unit == 'trips' else '%.2f'|format(monthly_goal.target_value) }} {{ monthly_goal.unit }}{% endif %}</strong> {{ 'spent' if monthly_goal.direction == 'limit' else monthly_goal.aggregate_label }} this month</p>
-                            <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.direction == 'limit' and monthly_goal.remaining_value < 0 %}You are {{ '%.2f'|format(-monthly_goal.remaining_value) }} {{ monthly_goal.unit }} over your limit. Choose lower-cost options to help bring the monthly total down.{% elif monthly_goal.direction == 'limit' %}{{ '%.2f'|format(monthly_goal.remaining_value) }} {{ monthly_goal.unit }} remains in your monthly limit.{% elif monthly_goal.reached %}Goal reached. Keep going if you want to beat your target.{% else %}{{ '%.2f'|format(monthly_goal.remaining_value) }} {{ monthly_goal.unit }} to go. Each saved trip adds to this month's total.{% endif %}</small>
+                            <p><strong>{{ "%.2f"|format(monthly_goal.current_value) }} / {{ "%.2f"|format(monthly_goal.target_value) }} {{ monthly_goal.goal_unit }}</strong> this month</p>
+                            <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.reached %}Target reached. Keep recording your journeys.{% else %}All saved trips count toward the monthly total. The recommendation uses this goal, while every transport choice stays available.{% endif %}</small>
                             {% else %}
                             <p>No target set for this month.</p>
                             <small>Set it once in Preferences; this page will keep showing your progress.</small>
@@ -491,11 +491,10 @@
                             <div class="traffic-control-group"><span class="traffic-control-label"><i class="fa-solid fa-road" aria-hidden="true"></i> TRAFFIC FLOW</span><button id="traffic-toggle" type="button" aria-pressed="false">Show traffic</button></div>
                             <small id="traffic-status" role="status">Traffic overlay status</small>
                             <div id="traffic-legend" class="traffic-legend" hidden aria-label="Traffic-flow legend">
-                                <span><i class="free"></i>Freer flow</span><span><i class="moderate"></i>Moderate</span><span><i class="slow"></i>Slow</span><span><i class="heavy"></i>Heavy</span>
+                                <span><i class="free"></i>Freer flow</span><span><i class="moderate"></i>Moderate</span><span><i class="slow"></i>Slow</span><span><i class="heavy"></i>Heavy</span><span><i class="closed"></i>Closed</span>
                             </div>
                         </div>
-                        <div id="map" data-traffic-available="{{ 'true' if traffic_available else 'false' }}" aria-label="Route map"></div>
-                        <p id="route-map-status" class="route-map-status" role="status" aria-live="polite">Enter two places and compare options to show a route line here.</p>
+                        <div id="map" data-traffic-available="{{ 'true' if traffic_available else 'false' }}"></div>
                         <div class="map-data-notes"><div id="weather-advisory" class="weather-advisory" role="status" aria-live="polite"></div><div id="route-estimate-note" class="estimate-banner" hidden></div></div>
                     </div>
                 </div>
@@ -600,11 +599,6 @@
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
-            const resizeMap = () => requestAnimationFrame(() => map.invalidateSize({ pan: false }));
-            if ('ResizeObserver' in window) new ResizeObserver(resizeMap).observe(document.getElementById('map'));
-            window.addEventListener('resize', resizeMap, { passive: true });
-            window.addEventListener('orientationchange', resizeMap, { passive: true });
-            setTimeout(resizeMap, 120);
         }
 
         function clearMap() {
@@ -619,9 +613,8 @@
                         && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
                     .map(point => [Number(point[0]), Number(point[1])])
                 : [];
-            const valid = supplied.filter(([lat, lon]) => lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180);
-            if (valid.length >= 2) {
-                return { points: valid, estimated: Boolean(route.is_estimate) };
+            if (supplied.length >= 2) {
+                return { points: supplied, estimated: Boolean(route.is_estimate) };
             }
             return {
                 points: [[Number(origin.lat), Number(origin.lon)], [Number(destination.lat), Number(destination.lon)]],
@@ -631,23 +624,16 @@
 
         function addRouteLine(targetMap, route, origin, destination) {
             const display = getRouteDisplayGeometry(route, origin, destination);
-            const lineOptions = {
-                lineCap: 'round', lineJoin: 'round', interactive: false,
-                dashArray: display.estimated ? '9 10' : undefined,
-            };
-            const casing = L.polyline(display.points, {
-                ...lineOptions, color: '#10251d', weight: display.estimated ? 10 : 13, opacity: 0.88,
-            });
             const line = L.polyline(display.points, {
-                ...lineOptions, color: display.estimated ? '#c58a35' : '#e0ad45',
-                weight: display.estimated ? 5 : 7, opacity: 1,
-            });
+                color: getTransportColor(route.mode),
+                weight: display.estimated ? 4 : 6,
+                opacity: 0.9,
+                dashArray: display.estimated ? '8 10' : undefined
+            }).addTo(targetMap);
             line.bindTooltip(display.estimated
                 ? 'Approximate direction only — not a street-level route.'
-                : `${route.mode.toUpperCase()} route from ${route.provider || 'a routing provider'}.`);
-            const lineGroup = L.featureGroup([casing, line]).addTo(targetMap);
-            lineGroup.routeLayer = line;
-            return lineGroup;
+                : `${route.mode.toUpperCase()} route from a routing provider.`);
+            return line;
         }
 
         const originInput = document.getElementById('origin');
@@ -656,21 +642,18 @@
         const resultsSidebar = document.getElementById('results-sidebar');
         const loading = document.getElementById('loading');
 
-        async function readApiJson(response, actionName) {
+        async function readApiResponse(response) {
             const contentType = response.headers.get('content-type') || '';
-            const responseText = await response.text();
-            let payload = null;
-            if (contentType.includes('application/json') && responseText) {
-                try { payload = JSON.parse(responseText); } catch (_error) { /* handled below */ }
+            if (!contentType.includes('application/json')) {
+                throw new Error(response.status >= 500
+                    ? `Ikhtiyar is temporarily unavailable (HTTP ${response.status}). Please retry shortly.`
+                    : `The server returned an unexpected response (HTTP ${response.status}).`);
             }
-            if (!response.ok) {
-                if (payload && typeof payload.error === 'string') throw new Error(payload.error);
-                throw new Error(`${actionName} failed with HTTP ${response.status}. The server returned a non-JSON error page. Check the Render service logs at this time; the app may have timed out or become unavailable.`);
+            const data = await response.json();
+            if (!response.ok || data.error) {
+                throw new Error(data.error || `Request failed (HTTP ${response.status}).`);
             }
-            if (!payload || typeof payload !== 'object') {
-                throw new Error(`${actionName} returned an invalid response. Please retry; if it continues, check the Render service logs.`);
-            }
-            return payload;
+            return data;
         }
 
         async function calculateRoute() {
@@ -701,8 +684,7 @@
                     body: JSON.stringify(routeRequest)
                 });
 
-                const data = await readApiJson(res, 'Route comparison');
-                if (data.error) throw new Error(data.error);
+                const data = await readApiResponse(res);
 
                 renderResults(data);
             } catch (err) {
@@ -725,12 +707,9 @@
             const destinationMarker = L.marker([data.destination.lat, data.destination.lon], { icon: destinationIcon }).addTo(map);
             activeLayers.push(originMarker, destinationMarker);
 
-            // Prefer the recommended option. Without provider geometry, show a dashed straight-line estimate.
-            const hasRouteLine = (route) => Array.isArray(route?.geometry)
-                && route.geometry.length >= 2
-                && route.geometry.some((point) => Array.isArray(point) && point.length >= 2);
-            const displayedRoute = data.results.find(r => r.mode === 'driving' && !r.is_estimate && hasRouteLine(r))
-                || data.results.find(r => !r.is_estimate && hasRouteLine(r))
+            // Prefer a real road-following driving geometry for the shared map.
+            const displayedRoute = data.results.find(r => r.mode === 'driving' && !r.is_estimate && r.geometry?.length >= 2)
+                || data.results.find(r => !r.is_estimate && r.geometry?.length >= 2)
                 || data.results.find(r => r.is_recommended)
                 || data.results.find(r => r.mode === 'driving');
             const routeLine = displayedRoute
@@ -740,19 +719,7 @@
 
             const boundsLayers = [originMarker, destinationMarker];
             if (routeLine) boundsLayers.push(routeLine);
-            const bounds = L.featureGroup(boundsLayers).getBounds();
-            const mapStatus = document.getElementById('route-map-status');
-            const shownGeometry = displayedRoute ? getRouteDisplayGeometry(displayedRoute, data.origin, data.destination) : null;
-            if (mapStatus) {
-                mapStatus.textContent = shownGeometry?.estimated
-                    ? 'Showing an approximate direction only; no street-level route is available for this option.'
-                    : `Showing the mapped ${displayedRoute?.mode || 'driving'} route${displayedRoute?.provider ? ` from ${displayedRoute.provider}` : ''}.`;
-            }
-            requestAnimationFrame(() => {
-                map.invalidateSize({ pan: false });
-                if (bounds.isValid()) map.fitBounds(bounds.pad(0.18), { animate: false, maxZoom: 15 });
-                requestAnimationFrame(() => map.invalidateSize({ pan: false }));
-            });
+            map.fitBounds(L.featureGroup(boundsLayers).getBounds().pad(0.25));
 
             // Render sorted cards
             const sorted = [...data.results].sort(
@@ -831,7 +798,7 @@
                     body: JSON.stringify(payload)
                 });
 
-                const data = await readApiJson(response, 'Saving this trip');
+                const data = await readApiResponse(response);
                 if (data.success) {
                     if (data.gamification) window.dispatchEvent(new CustomEvent('ikhtiyar:reward', { detail: data.gamification }));
                     if (data.saved_to_history === false) {
@@ -846,7 +813,7 @@
                 }
             } catch (error) {
                 console.error('Error recording trip:', error);
-                alert('Failed to record trip. Please check your connection and try again.');
+                alert(error.message || 'Failed to record trip. Please check your connection and try again.');
             }
         }
 

@@ -1,49 +1,16 @@
-"""Cumulative monthly target helpers for account travel history."""
+"""Pure aggregation helpers for user-selected monthly travel goals."""
 
 import calendar
 import math
 from datetime import date
 
-GOAL_TYPES = {
-    "co2_savings": {
-        "title": "CO₂ savings",
-        "description": "Save this much CO₂ compared with driving every recorded trip.",
-        "unit": "kg CO₂",
-        "aggregate_label": "saved",
-        "direction": "increase",
-    },
-    "spending_limit": {
-        "title": "Transport budget",
-        "description": "Keep your total monthly transport cost under this amount.",
-        "unit": "AED",
-        "aggregate_label": "spent",
-        "direction": "limit",
-    },
-    "trip_count": {
-        "title": "Trips this month",
-        "description": "Record this many journeys over the month.",
-        "unit": "trips",
-        "aggregate_label": "recorded",
-        "direction": "increase",
-    },
-    "sustainable_trips": {
-        "title": "Lower-impact trips",
-        "description": "Choose walking, cycling, Metro, or bus for this many saved journeys.",
-        "unit": "trips",
-        "aggregate_label": "completed",
-        "direction": "increase",
-    },
-    "active_distance": {
-        "title": "Active travel distance",
-        "description": "Walk or cycle this many kilometres across the month.",
-        "unit": "km",
-        "aggregate_label": "travelled",
-        "direction": "increase",
-    },
+GOAL_METRICS = {
+    "co2_saved": {"label": "CO₂ saved", "unit": "kg", "direction": "at_least"},
+    "budget": {"label": "Travel budget", "unit": "AED", "direction": "at_most"},
+    "trip_count": {"label": "Recorded trips", "unit": "trips", "direction": "at_least"},
+    "sustainable_trips": {"label": "Sustainable trips", "unit": "trips", "direction": "at_least"},
+    "active_distance": {"label": "Walking and cycling distance", "unit": "km", "direction": "at_least"},
 }
-
-SUSTAINABLE_MODES = {"walking", "cycling", "metro", "bus"}
-ACTIVE_MODES = {"walking", "cycling"}
 
 
 def month_key(day):
@@ -52,95 +19,72 @@ def month_key(day):
 
 def previous_month_key(day):
     first = day.replace(day=1)
-    return month_key(date.fromordinal(first.toordinal() - 1))
+    previous = date.fromordinal(first.toordinal() - 1)
+    return month_key(previous)
 
 
-def _trip_period(trip):
-    raw_date = trip.get("trip_date")
-    return raw_date.strftime("%Y-%m") if hasattr(raw_date, "strftime") else str(raw_date or "")[:7]
-
-
-def _number(value):
-    try:
-        parsed = float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
-    return parsed if math.isfinite(parsed) else 0.0
-
-
-def aggregate_goal(history, period, goal_type):
-    trips = [trip for trip in history or [] if _trip_period(trip) == period]
-    if goal_type == "spending_limit":
-        return round(sum(max(0.0, _number(trip.get("chosen_cost"))) for trip in trips), 2)
-    if goal_type == "trip_count":
-        return float(len(trips))
-    if goal_type == "sustainable_trips":
-        return float(sum(str(trip.get("chosen_transport", "")).lower() in SUSTAINABLE_MODES for trip in trips))
-    if goal_type == "active_distance":
-        return round(sum(
-            max(0.0, _number(trip.get("distance_km")))
-            for trip in trips
-            if str(trip.get("chosen_transport", "")).lower() in ACTIVE_MODES
-        ), 2)
-    return round(sum(max(0.0, _number(trip.get("co2_saved"))) for trip in trips), 2)
+def monthly_metric_value(history, period, metric):
+    total = 0.0
+    for trip in history or []:
+        raw_date = trip.get("trip_date")
+        trip_period = raw_date.strftime("%Y-%m") if hasattr(raw_date, "strftime") else str(raw_date or "")[:7]
+        if trip_period != period:
+            continue
+        mode = str(trip.get("chosen_transport", "")).lower()
+        try:
+            if metric == "co2_saved":
+                value = max(0.0, float(trip.get("co2_saved") or 0))
+            elif metric == "budget":
+                value = max(0.0, float(trip.get("chosen_cost") or 0))
+            elif metric == "trip_count":
+                value = 1.0
+            elif metric == "sustainable_trips":
+                value = 1.0 if mode in {"metro", "bus", "walking", "cycling"} else 0.0
+            elif metric == "active_distance":
+                value = max(0.0, float(trip.get("distance_km") or 0)) if mode in {"walking", "cycling"} else 0.0
+            else:
+                return 0.0
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            total += value
+    return round(total, 2)
 
 
 def build_goal_state(goal, history, today, *, finished=False):
     if not goal:
         return None
-    goal_type = str(goal.get("goal_type") or "co2_savings")
-    if goal_type not in GOAL_TYPES:
-        goal_type = "co2_savings"
-    target = _number(goal.get("target_value", goal.get("target_co2_kg")))
-    if target <= 0:
+    metric = str(goal.get("goal_metric") or "co2_saved")
+    if metric not in GOAL_METRICS:
+        metric = "co2_saved"
+    try:
+        target = float(goal.get("target_value", goal.get("target_co2_kg")) or 0)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(target) or target <= 0:
         return None
 
     period = str(goal.get("month") or month_key(today))
-    value = aggregate_goal(history, period, goal_type)
-    definition = GOAL_TYPES[goal_type]
-    limit = definition["direction"] == "limit"
+    value = monthly_metric_value(history, period, metric)
+    direction = GOAL_METRICS[metric]["direction"]
+    remaining = max(0.0, target - value) if direction == "at_least" else max(0.0, target - value)
+    reached = value + 0.005 >= target if direction == "at_least" else (finished and value <= target + 0.005)
+    percent = min(100, int(round(value / target * 100)))
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     pace_target = target * today.day / days_in_month if period == month_key(today) else target
-
-    if limit:
-        remaining = round(target - value, 2)
-        progress_percent = min(100, max(0, int(round(value / target * 100))))
-        reached = value <= target + 0.005
-        behind_pace = period == month_key(today) and value > pace_target + 0.005
-        status = "over_limit" if value > target else ("on_track" if not behind_pace else "behind")
-    else:
-        remaining = max(0.0, round(target - value, 2))
-        progress_percent = min(100, int(round(value / target * 100)))
-        reached = value + 0.005 >= target
-        behind_pace = period == month_key(today) and today.day > 1 and value + 0.005 < pace_target
-        status = "reached" if reached else ("behind" if behind_pace else "on_track")
-
-    if finished:
-        status = "reached" if reached else "missed"
-    elif limit and reached:
-        status = "on_track"
-    elif not limit and reached:
-        status = "reached"
-
+    behind_pace = period == month_key(today) and (
+        value + 0.005 < pace_target if direction == "at_least" else value > target
+    )
+    status = ("reached" if reached else "missed") if finished else (
+        "reached" if reached else "behind" if behind_pace else "on_track"
+    )
+    meta = GOAL_METRICS[metric]
     return {
-        "month": period,
-        "goal_type": goal_type,
-        "title": definition["title"],
-        "description": definition["description"],
-        "unit": definition["unit"],
-        "aggregate_label": definition["aggregate_label"],
-        "direction": definition["direction"],
-        "target_value": round(target, 2),
-        "current_value": round(value, 2),
-        "remaining_value": remaining,
-        "progress_percent": progress_percent,
-        "pace_target": round(pace_target, 2),
-        "behind_pace": behind_pace,
-        "reached": reached,
-        "status": status,
-        "finished": finished,
-        # Backward-compatible aliases for an already deployed CO₂-only goal.
-        "target_co2_kg": round(target, 2),
-        "saved_co2_kg": round(value, 2),
-        "remaining_co2_kg": max(0.0, round(target - value, 2)),
+        "month": period, "goal_metric": metric, "goal_label": meta["label"], "goal_unit": meta["unit"],
+        "goal_direction": direction, "target_value": round(target, 2), "current_value": value,
+        "remaining_value": remaining, "progress_percent": percent, "pace_target": round(pace_target, 2),
+        "behind_pace": behind_pace, "reached": reached, "status": status, "finished": finished,
+        # Compatibility fields for older stored CO₂ goals and templates.
+        "target_co2_kg": round(target, 2), "saved_co2_kg": value,
+        "remaining_co2_kg": remaining,
     }

@@ -5,6 +5,50 @@ from config import Config
 
 class TomTomService:
     @staticmethod
+    def get_driving_route(origin_lat, origin_lon, dest_lat, dest_lon):
+        """Request one TomTom car route and return its street-level polyline."""
+        api_key = str(Config.TOMTOM_KEY or "").strip()
+        if not api_key:
+            raise ValueError("TomTom key is not configured")
+        url = (
+            "https://api.tomtom.com/routing/1/calculateRoute/"
+            f"{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
+        )
+        response = requests.get(
+            url,
+            params={
+                "key": api_key,
+                "travelMode": "car",
+                "routeType": "fastest",
+                "routeRepresentation": "polyline",
+            },
+            timeout=(3, 5),
+        )
+        response.raise_for_status()
+        data = response.json()
+        routes = data.get("routes") or []
+        if not routes:
+            raise ValueError("TomTom returned no route")
+        route = routes[0]
+        summary = route.get("summary") or {}
+        geometry = []
+        for leg in route.get("legs") or []:
+            for point in leg.get("points") or []:
+                try:
+                    geometry.append([
+                        float(point["latitude"]), float(point["longitude"])
+                    ])
+                except (KeyError, TypeError, ValueError):
+                    continue
+        if len(geometry) < 2:
+            raise ValueError("TomTom returned no usable route geometry")
+        return {
+            "distance_km": float(summary["lengthInMeters"]) / 1000,
+            "duration_min": float(summary["travelTimeInSeconds"]) / 60,
+            "geometry": geometry,
+        }
+
+    @staticmethod
     def get_route(origin_lat, origin_lon, dest_lat, dest_lon):
         """
         Get route from TomTom API with accurate road following
@@ -29,20 +73,25 @@ class TomTomService:
         for mode_key, travel_mode in modes.items():
             try:
                 # TomTom Routing API
-                url = f"https://api.tomtom.com/routing/1/calculateRoute/{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
+                # TomTom v1 route locations are latitude,longitude pairs in
+                # the path. travelMode is a query parameter, not a URL segment.
+                url = (
+                    "https://api.tomtom.com/routing/1/calculateRoute/"
+                    f"{origin_lat},{origin_lon}:{dest_lat},{dest_lon}/json"
+                )
                 
                 params = {
                     'key': api_key,
+                    'travelMode': travel_mode,
                     'traffic': 'true',
                     'routeRepresentation': 'polyline',
                     'computeBestOrder': 'true',
                     'routeType': 'fastest',
-                    'travelMode': travel_mode,
                     'avoid': 'unpavedRoads',
                     'sectionType': 'traffic'
                 }
                 
-                response = requests.get(url, params=params, timeout=10)
+                response = requests.get(url, params=params, timeout=5)
                 response.raise_for_status()
                 data = response.json()
                 
@@ -63,9 +112,6 @@ class TomTomService:
                                 for point in leg['points']:
                                     # TomTom provides lat,lon directly
                                     geometry.append([point['latitude'], point['longitude']])
-
-                    if len(geometry) < 2:
-                        raise Exception("TomTom returned no usable route geometry")
                     
                     res[mode_key] = {
                         'distance_km': round(dist_km, 2),
@@ -78,9 +124,7 @@ class TomTomService:
                     raise Exception("No route found in TomTom response")
                     
             except Exception as e:
-                status_code = getattr(getattr(e, 'response', None), 'status_code', None)
-                failure = f"HTTP {status_code}" if status_code else type(e).__name__
-                print(f"TomTom API ({mode_key}) failed ({failure}); using estimate.")
+                print(f"TomTom API ({mode_key}) failed ({type(e).__name__}); using estimate.")
                 # Fallback: Haversine distance * factor
                 straight_dist = TomTomService.haversine(origin_lat, origin_lon, dest_lat, dest_lon)
                 
