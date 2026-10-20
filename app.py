@@ -100,19 +100,46 @@ def logout():
 
 @app.route('/home')
 def index():
-    if 'user_id' not in session: 
+    if 'user_id' not in session:
         return redirect(url_for('login'))
-    
-    # Get trip count for AI progress banner
-    history = db.get_history(session['user_id'])
+
+    user_id = session['user_id']
+    history = db.get_history(user_id)
     trip_count = len(history)
-    monthly_goal = monthly_goal_context(session['user_id'], history)['current']
-    
+    monthly_goal = monthly_goal_context(user_id, history)['current']
+    recent = history[:3]
+
+    today = uae_today()
+    week_start = current_week_start(today).isoformat()
+    weekly_challenges = build_weekly_challenges(history, today)
+    for challenge in weekly_challenges:
+        if challenge['is_complete']:
+            feature_store.award_weekly_challenge(
+                user_id, week_start, challenge['key'], challenge['reward_xp']
+            )
+
+    progress = feature_store.get_gamification(user_id)
+    last_trip_date = str(progress.get('last_trip_date') or '')[:10]
+    current_streak = int(progress.get('current_streak') or 0)
+    if last_trip_date not in {today.isoformat(), (today - timedelta(days=1)).isoformat()}:
+        current_streak = 0
+    gamification = level_from_points(progress.get('total_points', 0))
+    gamification.update({
+        'current_streak': current_streak,
+        'best_streak': int(progress.get('best_streak') or 0),
+        'last_trip_date': last_trip_date or None,
+    })
+
+    for trip in recent:
+        for field in ('trip_date', 'trip_time'):
+            value = trip.get(field)
+            if hasattr(value, 'isoformat'):
+                trip[field] = value.isoformat()
+
     return render_template(
         'index.html', username=session['username'], trip_count=trip_count,
-        traffic_available=TrafficService.is_configured(), monthly_goal=monthly_goal
+        monthly_goal=monthly_goal, gamification=gamification, recent=recent
     )
-
 @app.route('/api/saved-destinations', methods=['GET', 'POST'])
 def saved_destinations_api():
     if 'user_id' not in session:

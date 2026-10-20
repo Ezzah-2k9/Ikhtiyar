@@ -10,27 +10,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/page-polish.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/feature-enhancements.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-shell.css') }}">
 </head>
 <body class="settings-page">
 <div class="page-wrapper">
-    <nav class="navbar" aria-label="Main navigation">
-        <div class="container">
-            <a href="/home" class="logo" aria-label="Ikhtiyar home">
-                <img src="{{ url_for('static', filename='images/ikhtiyar-black.png') }}" alt="Ikhtiyar" onerror="this.style.display='none';this.parentElement.classList.add('logo-missing')">
-            </a>
-            <div class="nav-links">
-                <a href="/home">Home</a>
-                <a href="/dashboard">Dashboard</a>
-                <a href="/history">History</a>
-                <a href="/settings" class="active" aria-current="page">Settings</a>
-            </div>
-            <div class="nav-user-section">
-                <span class="nav-divider" aria-hidden="true"></span>
-                <span class="nav-username">{{ username }}</span>
-                <a href="/logout" class="logout-link" aria-label="Sign out"><i class="fas fa-arrow-right-from-bracket" aria-hidden="true"></i></a>
-            </div>
-        </div>
-    </nav>
+    {% include 'components/navbar.html' %}
 
     <main class="main-content">
         <div class="container">
@@ -49,11 +33,7 @@
             {% endwith %}
 
             <div class="settings-layout">
-                <nav class="settings-tabs" aria-label="Settings sections">
-                    <a class="tab {% if active_tab == 'profile' %}active{% endif %}" href="{{ url_for('settings', tab='profile') }}" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="{{ 'true' if active_tab == 'profile' else 'false' }}" {% if active_tab == 'profile' %}aria-current="page"{% endif %} data-settings-tab="profile"><i class="fa-regular fa-user" aria-hidden="true"></i> Profile</a>
-                    <a class="tab {% if active_tab == 'preferences' %}active{% endif %}" href="{{ url_for('settings', tab='preferences') }}" role="tab" id="tab-preferences" aria-controls="panel-preferences" aria-selected="{{ 'true' if active_tab == 'preferences' else 'false' }}" {% if active_tab == 'preferences' %}aria-current="page"{% endif %} data-settings-tab="preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Preferences</a>
-                    <a class="tab {% if active_tab == 'privacy' %}active{% endif %}" href="{{ url_for('settings', tab='privacy') }}" role="tab" id="tab-privacy" aria-controls="panel-privacy" aria-selected="{{ 'true' if active_tab == 'privacy' else 'false' }}" {% if active_tab == 'privacy' %}aria-current="page"{% endif %} data-settings-tab="privacy"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Privacy</a>
-                </nav>
+                {% include 'components/navbar.html' %}
 
                 <section class="settings-panel {% if active_tab == 'profile' %}active{% endif %}" id="panel-profile" role="tabpanel" aria-labelledby="tab-profile" data-settings-panel="profile" {% if active_tab != 'profile' %}hidden{% endif %}>
                     <div class="settings-card">
