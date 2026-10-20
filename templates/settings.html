@@ -33,7 +33,11 @@
             {% endwith %}
 
             <div class="settings-layout">
-                {% include 'components/navbar.html' %}
+                <nav class="settings-tabs" aria-label="Settings sections">
+                    <a class="tab {% if active_tab == 'profile' %}active{% endif %}" href="{{ url_for('settings', tab='profile') }}" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="{{ 'true' if active_tab == 'profile' else 'false' }}" {% if active_tab == 'profile' %}aria-current="page"{% endif %} data-settings-tab="profile"><i class="fa-regular fa-user" aria-hidden="true"></i> Profile</a>
+                    <a class="tab {% if active_tab == 'preferences' %}active{% endif %}" href="{{ url_for('settings', tab='preferences') }}" role="tab" id="tab-preferences" aria-controls="panel-preferences" aria-selected="{{ 'true' if active_tab == 'preferences' else 'false' }}" {% if active_tab == 'preferences' %}aria-current="page"{% endif %} data-settings-tab="preferences"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Preferences</a>
+                    <a class="tab {% if active_tab == 'privacy' %}active{% endif %}" href="{{ url_for('settings', tab='privacy') }}" role="tab" id="tab-privacy" aria-controls="panel-privacy" aria-selected="{{ 'true' if active_tab == 'privacy' else 'false' }}" {% if active_tab == 'privacy' %}aria-current="page"{% endif %} data-settings-tab="privacy"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Privacy</a>
+                </nav>
 
                 <section class="settings-panel {% if active_tab == 'profile' %}active{% endif %}" id="panel-profile" role="tabpanel" aria-labelledby="tab-profile" data-settings-panel="profile" {% if active_tab != 'profile' %}hidden{% endif %}>
                     <div class="settings-card">
