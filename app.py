@@ -39,15 +39,41 @@ def monthly_goal_context(user_id, history, today=None):
     current = build_goal_state(
         feature_store.get_monthly_goal(user_id, period), history, today
     )
+    current_notice = None
     if current:
         current['history_saving_enabled'] = history_saving_enabled
+        if current['exceeded']:
+            current_notice = {
+                'kind': 'exceeded',
+                'title': f"Monthly {current['goal_label'].lower()} target exceeded",
+                'notice': (
+                    f"You've spent {current['current_value']:.2f} {current['goal_unit']} against "
+                    f"your {current['target_value']:.2f} {current['goal_unit']} limit, "
+                    f"exceeding it by {current['overage_value']:.2f} {current['goal_unit']}. "
+                    "The calculator will continue to show every transport option and favour lower-cost choices."
+                ),
+            }
+        elif current['reached']:
+            current_notice = {
+                'kind': 'reached',
+                'title': f"Monthly {current['goal_label'].lower()} target reached",
+                'notice': (
+                    f"You've reached {current['current_value']:.2f} {current['goal_unit']} "
+                    f"against your {current['target_value']:.2f} {current['goal_unit']} target this month. "
+                    "Your saved trips are all included."
+                ),
+            }
+
     previous_period = previous_month_key(today)
     previous = build_goal_state(
         feature_store.get_monthly_goal(user_id, previous_period), history, today,
         finished=True,
     )
     if previous:
-        outcome = 'reached' if previous['reached'] else 'was not met'
+        if previous['exceeded']:
+            outcome = f"went over budget by {previous['overage_value']:.2f} {previous['goal_unit']}"
+        else:
+            outcome = 'was reached' if previous['reached'] else 'was not met'
         previous['notice'] = (
             f"Last month's {previous['goal_label']} target {outcome}: "
             f"{previous['current_value']:.2f} / {previous['target_value']:.2f} {previous['goal_unit']}. "
@@ -55,10 +81,10 @@ def monthly_goal_context(user_id, history, today=None):
         )
     return {
         'current': current,
+        'current_notice': current_notice,
         'previous_notice': previous,
         'history_saving_enabled': history_saving_enabled,
     }
-
 @app.route('/')
 def landing():
     if 'user_id' in session:
@@ -106,7 +132,8 @@ def index():
     user_id = session['user_id']
     history = db.get_history(user_id)
     trip_count = len(history)
-    monthly_goal = monthly_goal_context(user_id, history)['current']
+    monthly_goal_data = monthly_goal_context(user_id, history)
+    monthly_goal = monthly_goal_data['current']
     recent = history[:3]
 
     today = uae_today()
@@ -138,7 +165,8 @@ def index():
 
     return render_template(
         'index.html', username=session['username'], trip_count=trip_count,
-        monthly_goal=monthly_goal, gamification=gamification, recent=recent
+        monthly_goal=monthly_goal, monthly_goal_current_notice=monthly_goal_data['current_notice'],
+        gamification=gamification, recent=recent
     )
 @app.route('/api/saved-destinations', methods=['GET', 'POST'])
 def saved_destinations_api():
@@ -634,7 +662,8 @@ def dashboard():
     return render_template(
         'dashboard.html', stats=stats, recent=recent, username=session['username'],
         gamification=gamification, weekly_challenges=weekly_challenges,
-        monthly_goal=monthly_goals['current'], monthly_goal_notice=monthly_goals['previous_notice']
+        monthly_goal=monthly_goals['current'], monthly_goal_current_notice=monthly_goals['current_notice'],
+        monthly_goal_notice=monthly_goals['previous_notice']
     )
 
 @app.route('/history')
@@ -898,3 +927,4 @@ def download_dashboard_pdf():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG') == '1')
+

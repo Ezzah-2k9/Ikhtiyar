@@ -91,7 +91,7 @@
                                 </select>
                                 <label for="monthly-goal-target">This month’s target <span id="monthly-goal-unit">{{ monthly_goal.goal_unit if monthly_goal else 'kg' }}</span></label>
                                 <div class="monthly-goal-form-row"><input id="monthly-goal-target" class="form-control" type="number" name="target_value" min="0.1" max="100000" step="any" value="{{ '%.2f'|format(monthly_goal.target_value) if monthly_goal else '' }}" placeholder="Enter target" required><button type="submit" class="btn btn-primary">Save monthly goal</button></div>
-                                <small>{% if monthly_goal and not monthly_goal.history_saving_enabled %}Trip-history saving is off, so new trips will not update monthly progress.{% elif monthly_goal %}{{ '%.2f'|format(monthly_goal.current_value) }} / {{ '%.2f'|format(monthly_goal.target_value) }} {{ monthly_goal.goal_unit }} this month.{% else %}No target is currently set for this month.{% endif %}</small>
+                                <small>{% if monthly_goal and not monthly_goal.history_saving_enabled %}Trip-history saving is off, so new trips will not update monthly progress.{% elif monthly_goal and monthly_goal.exceeded %}Spent {{ '%.2f'|format(monthly_goal.current_value) }} {{ monthly_goal.goal_unit }}; this is {{ '%.2f'|format(monthly_goal.overage_value) }} {{ monthly_goal.goal_unit }} over the monthly cap.{% elif monthly_goal and monthly_goal.goal_direction == 'at_most' %}Spent {{ '%.2f'|format(monthly_goal.current_value) }} of {{ '%.2f'|format(monthly_goal.target_value) }} {{ monthly_goal.goal_unit }} this month.{% elif monthly_goal %}{{ '%.2f'|format(monthly_goal.current_value) }} / {{ '%.2f'|format(monthly_goal.target_value) }} {{ monthly_goal.goal_unit }} this month.{% else %}No target is currently set for this month.{% endif %}</small>
                             </form>
                         </section>
                     </div>
@@ -128,3 +128,4 @@
 </script>
 </body>
 </html>
+

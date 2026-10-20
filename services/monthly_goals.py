@@ -67,24 +67,43 @@ def build_goal_state(goal, history, today, *, finished=False):
     period = str(goal.get("month") or month_key(today))
     value = monthly_metric_value(history, period, metric)
     direction = GOAL_METRICS[metric]["direction"]
-    remaining = max(0.0, target - value) if direction == "at_least" else max(0.0, target - value)
-    reached = value + 0.005 >= target if direction == "at_least" else (finished and value <= target + 0.005)
+    tolerance = 0.005
+    exceeded = direction == "at_most" and value > target + tolerance
+    if direction == "at_least":
+        reached = value + tolerance >= target
+    else:
+        # A spending cap is only confirmed as met when the month is complete.
+        reached = finished and not exceeded
+
+    remaining = max(0.0, target - value)
+    overage = max(0.0, value - target) if direction == "at_most" else 0.0
     percent = min(100, int(round(value / target * 100)))
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     pace_target = target * today.day / days_in_month if period == month_key(today) else target
     behind_pace = period == month_key(today) and (
-        value + 0.005 < pace_target if direction == "at_least" else value > target
+        value + tolerance < pace_target if direction == "at_least" else value > pace_target + tolerance
     )
-    status = ("reached" if reached else "missed") if finished else (
-        "reached" if reached else "behind" if behind_pace else "on_track"
-    )
+
+    if exceeded:
+        status = "exceeded"
+    elif reached:
+        status = "reached"
+    elif finished:
+        status = "missed"
+    elif behind_pace:
+        status = "behind"
+    else:
+        status = "on_track"
+
     meta = GOAL_METRICS[metric]
     return {
         "month": period, "goal_metric": metric, "goal_label": meta["label"], "goal_unit": meta["unit"],
         "goal_direction": direction, "target_value": round(target, 2), "current_value": value,
-        "remaining_value": remaining, "progress_percent": percent, "pace_target": round(pace_target, 2),
-        "behind_pace": behind_pace, "reached": reached, "status": status, "finished": finished,
+        "remaining_value": round(remaining, 2), "overage_value": round(overage, 2),
+        "progress_percent": percent, "pace_target": round(pace_target, 2),
+        "behind_pace": behind_pace, "reached": reached, "exceeded": exceeded,
+        "status": status, "finished": finished,
         # Compatibility fields for older stored CO₂ goals and templates.
         "target_co2_kg": round(target, 2), "saved_co2_kg": value,
-        "remaining_co2_kg": remaining,
+        "remaining_co2_kg": round(remaining, 2),
     }

@@ -486,10 +486,20 @@
                                 <span class="goal-emblem" aria-hidden="true"><i class="fa-solid fa-leaf"></i></span>
                                 <div><span class="page-kicker">YOUR MONTHLY TARGET</span><h4 id="calculator-monthly-goal-title">{{ monthly_goal.goal_label if monthly_goal else 'Travel progress' }}</h4></div>
                             </div>
+                            {% if monthly_goal_current_notice %}
+                            <aside class="monthly-goal-current-notice is-{{ monthly_goal_current_notice.kind }}" role="status" aria-live="polite">
+                                <span class="monthly-goal-notice-icon"><i class="fa-solid {{ 'fa-triangle-exclamation' if monthly_goal_current_notice.kind == 'exceeded' else 'fa-circle-check' }}" aria-hidden="true"></i></span>
+                                <div><strong>{{ monthly_goal_current_notice.title }}</strong><p>{{ monthly_goal_current_notice.notice }}</p></div>
+                            </aside>
+                            {% endif %}
                             {% if monthly_goal %}
-                            <div class="monthly-goal-peek-progress"><span style="width: {{ monthly_goal.progress_percent }}%"></span></div>
+                            <div class="monthly-goal-peek-progress" role="progressbar" aria-label="Monthly {{ monthly_goal.goal_label }} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ monthly_goal.progress_percent }}"><span style="width: {{ monthly_goal.progress_percent }}%"></span></div>
+                            {% if monthly_goal.goal_direction == 'at_most' %}
+                            <p><strong>Spent {{ "%.2f"|format(monthly_goal.current_value) }} / {{ "%.2f"|format(monthly_goal.target_value) }} {{ monthly_goal.goal_unit }}</strong> this month</p>
+                            {% else %}
                             <p><strong>{{ "%.2f"|format(monthly_goal.current_value) }} / {{ "%.2f"|format(monthly_goal.target_value) }} {{ monthly_goal.goal_unit }}</strong> this month</p>
-                            <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.reached %}Target reached. Keep recording your journeys.{% else %}All saved trips count toward the monthly total. The recommendation uses this goal, while every transport choice stays available.{% endif %}</small>
+                            {% endif %}
+                            <small>{% if not monthly_goal.history_saving_enabled %}Progress is paused because trip-history saving is off. Turn it on in Privacy settings to count new trips.{% elif monthly_goal.exceeded %}You are {{ "%.2f"|format(monthly_goal.overage_value) }} {{ monthly_goal.goal_unit }} over the monthly budget limit.{% elif monthly_goal.goal_direction == 'at_most' %}{{ "%.2f"|format(monthly_goal.remaining_value) }} {{ monthly_goal.goal_unit }} remain under this month's budget limit.{% elif monthly_goal.reached %}Target reached. Keep recording your journeys.{% else %}All saved trips count toward the monthly total. The recommendation uses this goal, while every transport choice stays available.{% endif %}</small>
                             {% else %}
                             <p>No target set for this month.</p>
                             <small>Set it once in Preferences; this page will keep showing your progress.</small>
@@ -974,3 +984,4 @@
 </body>
 
 </html>
+
