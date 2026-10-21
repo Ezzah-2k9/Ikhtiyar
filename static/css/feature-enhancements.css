@@ -1094,3 +1094,17 @@
 .calculator-page .monthly-goal-current-notice strong{font-size:10px}
 .calculator-page .monthly-goal-current-notice p{font-size:9px}
 @media(max-width:600px){.monthly-goal-current-notice{gap:8px;padding:10px 11px}.monthly-goal-current-notice p{font-size:9px}}
+
+
+/* Desktop map expands with its planner column instead of leaving an empty block. */
+@media (min-width:901px) {
+  .calculator-page .calculator-layout { align-items:stretch; }
+  .calculator-page .map-container { height:auto; min-height:460px; align-self:stretch; }
+  .calculator-page #map { height:auto; min-height:430px; flex:1 1 430px; }
+}
+@media (max-width:900px) {
+  .calculator-page #map { height:380px; min-height:380px; flex:0 0 380px; }
+}
+@media (max-width:600px) {
+  .calculator-page #map { height:330px; min-height:330px; flex:0 0 330px; }
+}
