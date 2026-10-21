@@ -599,6 +599,15 @@
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
+
+            if ('ResizeObserver' in window) {
+                const mapResizeObserver = new ResizeObserver(() => {
+                    window.requestAnimationFrame(() => {
+                        if (map) map.invalidateSize({ pan: false, debounceMoveend: true });
+                    });
+                });
+                mapResizeObserver.observe(map.getContainer());
+            }
         }
 
         function clearMap() {
