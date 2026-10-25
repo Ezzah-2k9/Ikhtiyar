@@ -14,12 +14,12 @@ class Config:
         DB_PATH = os.path.join(os.path.dirname(__file__), 'ikhtiyar.db')
     
     # API Keys - Check environment variables first
-    LOCATIONIQ_KEY = os.environ.get('LOCATIONIQ_KEY') or 'pk.8a75041bffb1400f168ef630c9a0266e'
-    ORS_KEY = os.environ.get('ORS_KEY') or 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImY0YTA2NDJmNTYzYjQ2YWE5YmI4OTdkZmM4M2RmYzQxIiwiaCI6Im11cm11cjY0In0='
-    TOMTOM_KEY = os.environ.get('TOMTOM_KEY') or 'o5n5p3980UDR7FlNkrTQDdZS7OTTjJtO'
-    GRAPHHOPPER_KEY = os.environ.get('GRAPHHOPPER_KEY') or 'd639e61b-d9b1-49cd-9b41-e67dfa98e7b5'
-    GEOAPIFY_KEY = os.environ.get('GEOAPIFY_KEY') or '336bad390efc4b0aab94eb5177500db7'
-    OPENWEATHER_KEY = os.environ.get('OPENWEATHER_KEY') or '78bde2e12065032bce998a7daf162268'
+    LOCATIONIQ_KEY = os.environ.get('LOCATIONIQ_KEY')
+    ORS_KEY = os.environ.get('ORS_KEY') 
+    TOMTOM_KEY = os.environ.get('TOMTOM_KEY')
+    GRAPHHOPPER_KEY = os.environ.get('GRAPHHOPPER_KEY') 
+    GEOAPIFY_KEY = os.environ.get('GEOAPIFY_KEY')
+    OPENWEATHER_KEY = os.environ.get('OPENWEATHER_KEY')
     
     # Constants
     SALIK_GATES = [
