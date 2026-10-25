@@ -9,17 +9,17 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: LOCATIONIQ_KEY
-        value: pk.8a75041bffb1400f168ef630c9a0266e
+        value: #add your key#
       - key: ORS_KEY
-        value: eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImY0YTA2NDJmNTYzYjQ2YWE5YmI4OTdkZmM4M2RmYzQxIiwiaCI6Im11cm11cjY0In0=
+        value: #add your key#
       - key: TOMTOM_KEY
-        value: o5n5p3980UDR7FlNkrTQDdZS7OTTjJtO
+        value: #add your key#
       - key: GRAPHHOPPER_KEY
-        value: d639e61b-d9b1-49cd-9b41-e67dfa98e7b5
+        value: #add your key#
       - key: GEOAPIFY_KEY
-        value: 336bad390efc4b0aab94eb5177500db7
+        value: #add your key#
       - key: OPENWEATHER_KEY
-        value: 78bde2e12065032bce998a7daf162268
+        value: #add your key#
       - key: DATABASE_URL
         fromDatabase:
           name: ikhtiyar-db
